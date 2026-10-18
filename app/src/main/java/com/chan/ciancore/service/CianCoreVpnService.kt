@@ -70,6 +70,17 @@ class CianCoreVpnService : VpnService() {
                 scope.launch { connect(nodeId) }
             }
             ACTION_DISCONNECT -> scope.launch { disconnect() }
+            ACTION_SWITCH -> {
+                val nodeId = intent.getLongExtra(EXTRA_NODE_ID, -1)
+                scope.launch {
+                    // Tear down current tunnel immediately, then connect.
+                    try { tunFd?.close() } catch (_: Throwable) { }
+                    tunFd = null
+                    try { xrayCore?.stop() } catch (_: Throwable) { }
+                    _state.value = ConnectionState.IDLE
+                    connect(nodeId)
+                }
+            }
         }
         return START_STICKY
     }
@@ -306,6 +317,7 @@ class CianCoreVpnService : VpnService() {
 
         const val ACTION_CONNECT = "com.chan.ciancore.action.CONNECT"
         const val ACTION_DISCONNECT = "com.chan.ciancore.action.DISCONNECT"
+        const val ACTION_SWITCH = "com.chan.ciancore.action.SWITCH"
         const val EXTRA_NODE_ID = "extra_node_id"
 
         private val _state = MutableStateFlow(ConnectionState.IDLE)
@@ -331,6 +343,19 @@ class CianCoreVpnService : VpnService() {
                 action = ACTION_DISCONNECT
             }
             context.startService(intent)
+        }
+
+        /**
+         * Switch to a different node immediately.
+         * Disconnects the current tunnel (if any) and connects to the new node
+         * without waiting.
+         */
+        fun startSwitch(context: Context, nodeId: Long) {
+            val intent = Intent(context, CianCoreVpnService::class.java).apply {
+                action = ACTION_SWITCH
+                putExtra(EXTRA_NODE_ID, nodeId)
+            }
+            ContextCompat.startForegroundService(context, intent)
         }
 
         /** Returns the VPN permission intent, or null if already granted. */

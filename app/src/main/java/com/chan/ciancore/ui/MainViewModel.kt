@@ -195,11 +195,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 ConnectionState.CONNECTED -> {
-                    // Already connected: switch to this node
-                    CianCoreVpnService.startDisconnect(ctx)
-                    // Reconnect after a brief delay
-                    kotlinx.coroutines.delay(500)
-                    CianCoreVpnService.startConnect(ctx, node.id)
+                    // Already connected: switch immediately to this node.
+                    CianCoreVpnService.startSwitch(ctx, node.id)
                 }
                 else -> { /* connecting, ignore */ }
             }
