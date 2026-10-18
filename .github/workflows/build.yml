@@ -55,6 +55,9 @@ jobs:
           git clone --depth 1 --branch v1.14.3 \
             https://github.com/SagerNet/sing-box.git /tmp/sing-box
           cd /tmp/sing-box
+          # Newer gomobile requires the tool directive in the module graph.
+          go get -tool golang.org/x/mobile/cmd/gobind
+          go mod tidy
           gomobile bind \
             -androidapi 24 \
             -trimpath \
