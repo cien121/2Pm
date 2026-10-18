@@ -32,6 +32,7 @@ object NodeLinkParser {
             "tuic" -> parseTuic(link)
             "socks", "socks5" -> parseSocks(link)
             "http" -> parseHttp(link)
+            "anytls" -> parseAnytls(link)
             else -> throw IllegalArgumentException("不支持的协议：$scheme")
         }
     }
@@ -378,6 +379,28 @@ object NodeLinkParser {
             congestionControl = q("congestion_control") ?: "bbr",
             udpRelayMode = q("udp_relay_mode") ?: "native",
             // TUIC is sing-box only; parsed fine, connection gated later.
+            coreType = CoreType.SING_BOX
+        )
+    }
+
+    private fun parseAnytls(link: String): Node {
+        val uri = Uri.parse(link)
+        val password = decode(uri.encodedUserInfo.orEmpty())
+        require(password.isNotBlank()) { "anytls 链接缺少密码（password@...）" }
+        checkHostPort(uri.host, uri.port, "anytls")
+        fun q(name: String): String? = uri.getQueryParameter(name)?.takeIf { it.isNotEmpty() }
+        val insecure = listOf("insecure", "allowInsecure", "allow_insecure")
+            .any { uri.getQueryParameter(it) == "1" }
+        return Node(
+            name = nodeName(uri, "${uri.host}:${uri.port}"),
+            rawLink = link,
+            protocol = "anytls",
+            host = uri.host!!,
+            port = uri.port,
+password=<redacted>
+            security = "tls",
+            sni = q("sni").orEmpty(),
+            insecure = insecure,
             coreType = CoreType.SING_BOX
         )
     }

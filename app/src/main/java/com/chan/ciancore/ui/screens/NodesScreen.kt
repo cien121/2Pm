@@ -735,6 +735,9 @@ private fun EditNodeDialog(
                         EditField("UUID", uuid, onChange = { uuid = it; error = null })
                         EditField("密码", password, onChange = { password = it })
                     }
+                    "anytls" -> {
+                        EditField("密码", password, onChange = { password = it; error = null })
+                    }
                     else -> EditField("认证密码", uuid, onChange = { uuid = it; error = null })
                 }
 
