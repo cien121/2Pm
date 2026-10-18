@@ -54,7 +54,7 @@ import com.chan.ciancore.ui.theme.InkSecondary
 import com.chan.ciancore.ui.theme.NightOutline
 import com.chan.ciancore.ui.theme.NightSurface
 import com.chan.ciancore.ui.theme.SignalError
-import com.chan.ciancore.ui.theme.SignalWarning
+import com.chan.ciancore.ui.theme.SignalWarn
 
 /**
  * Routing settings, modeled on v2rayNG's routing page.
@@ -361,7 +361,7 @@ private fun RuleRow(
                     text = rule.outboundName(),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = SignalWarning
+                    color = SignalWarn
                 )
             }
             if (!rule.locked) {

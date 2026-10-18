@@ -79,13 +79,6 @@ object XrayConfigBuilder {
         return config.toString()
     }
 
-    /** Backwards-compatible overload. */
-    fun build(
-        node: Node,
-        routeMode: String?,
-        customRules: List<Triple<String, String, String>>
-    ): String = build(node, BuildOptions(routeMode = routeMode, customRules = customRules))
-
     /**
      * Minimal config for latency probing: proxy + direct outbounds,
      * no TUN/socks inbounds. Used with measureOutboundDelay.
