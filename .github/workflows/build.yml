@@ -67,7 +67,11 @@ jobs:
           cd /tmp
           rm -rf libbox_fix && mkdir libbox_fix && cd libbox_fix
           unzip -q /tmp/libbox.aar
-          mv jni/arm64-v8a/libgojni.so jni/arm64-v8a/libboxjni.so
+          for abi in jni/*/; do
+            if [ -f "${abi}libgojni.so" ]; then
+              mv "${abi}libgojni.so" "${abi}libboxjni.so"
+            fi
+          done
           mkdir -p classes && cd classes
           unzip -q ../classes.jar
           rm -rf go
