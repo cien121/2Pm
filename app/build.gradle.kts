@@ -26,6 +26,24 @@ android {
         }
     }
 
+    signingConfigs {
+        create("ciancoreDebug") {
+            // All CI builds share one fixed keystore (decoded from the
+            // CIANCORE_DEBUG_KEYSTORE_B64 secret by the workflow), so every
+            // build carries the same signature and installs over the previous
+            // one. Local dev machines fall back to ~/.android/debug.keystore.
+            val ciKeystore = System.getenv("CIANCORE_KEYSTORE_PATH")
+            if (ciKeystore != null) {
+                storeFile = file(ciKeystore)
+                storeType = "PKCS12"
+            } else {
+                storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            }
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -35,9 +53,7 @@ android {
             )
         }
         debug {
-            // Debug builds are signed with the debug keystore by default.
-            // CI uses the same debug keystore for all builds so the APK
-            // can be installed directly without re-signing.
+            signingConfig = signingConfigs.getByName("ciancoreDebug")
         }
     }
     compileOptions {

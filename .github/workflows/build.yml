@@ -85,6 +85,16 @@ jobs:
       #     ls -lh $GITHUB_WORKSPACE/app/libs/
       # ── end disabled sing-box step ─────────────────────────────────
 
+      - name: Restore fixed debug keystore
+        run: |
+          # Every build must carry the same signature, or the APK won't
+          # install over the previous version (signature mismatch).
+          # The runner's auto-generated debug.keystore is NOT stable across
+          # runs (it changed between v0.5.0 and v0.6.0), so decode our own
+          # fixed keystore from secrets instead.
+          echo "${{ secrets.CIANCORE_DEBUG_KEYSTORE_B64 }}" | base64 -d > /tmp/ciancore-debug.keystore
+          echo "CIANCORE_KEYSTORE_PATH=/tmp/ciancore-debug.keystore" >> $GITHUB_ENV
+
       - name: Build debug APK (arm64-v8a)
         run: |
           # No gradle wrapper in the repo (binary jar can't be committed
@@ -94,6 +104,12 @@ jobs:
           unzip -q /tmp/gradle.zip -d /tmp
           export PATH=/tmp/gradle-8.7/bin:$PATH
           gradle assembleDebug --stacktrace
+
+      - name: Verify signing certificate
+        run: |
+          ls app/build/outputs/apk/debug/
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify --print-certs \
+            app/build/outputs/apk/debug/*.apk | grep -E "SHA-256 digest|Signer #1"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
