@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chan.ciancore.data.Node
+import com.chan.ciancore.data.SubscriptionManager
 import com.chan.ciancore.ui.MainViewModel
 import com.chan.ciancore.ui.components.AuroraBackground
 import com.chan.ciancore.ui.components.LatencyBar
@@ -65,6 +66,7 @@ import com.chan.ciancore.ui.theme.latencyColor
 @Composable
 fun NodesScreen(vm: MainViewModel) {
     val nodeList by vm.nodes.collectAsState()
+    val testingIds by vm.testingIds.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Node?>(null) }
 
@@ -76,15 +78,39 @@ fun NodesScreen(vm: MainViewModel) {
                 .statusBarsPadding()
                 .padding(top = 12.dp, bottom = 96.dp)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "节点",
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
+                    color = InkPrimary
+                )
+                if (nodeList.isNotEmpty()) {
+                    val testing = testingIds.isNotEmpty()
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, AuroraCyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .combinedClickable(onClick = { vm.testAllNodes() })
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = if (testing) "测速中…" else "⚡ 全部测速",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AuroraCyan
+                        )
+                    }
+                }
+            }
             Text(
-                text = "节点",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Black,
-                color = InkPrimary,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-            Text(
-                text = "${nodeList.size} 个信号源 · 长按删除",
+                text = "${nodeList.size} 个信号源 · 长按删除 · 点延迟测速",
                 fontSize = 13.sp,
                 color = InkSecondary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -105,8 +131,10 @@ fun NodesScreen(vm: MainViewModel) {
                     items(nodeList, key = { it.id }) { node ->
                         NodeTile(
                             node = node,
+                            testing = testingIds.contains(node.id),
                             onClick = { vm.selectNode(node) },
-                            onLongClick = { pendingDelete = node }
+                            onLongClick = { pendingDelete = node },
+                            onTest = { vm.testRealConnection(node) }
                         )
                     }
                 }
@@ -133,7 +161,9 @@ fun NodesScreen(vm: MainViewModel) {
                     onResult(err)
                     if (err == null) showAdd = false
                 }
-            }
+            },
+            onAddBatch = { text, onResult -> vm.addNodesFromText(text, onResult) },
+            onAddSubscription = { url, onResult -> vm.addNodesFromSubscription(url, onResult) }
         )
     }
 
@@ -162,8 +192,10 @@ fun NodesScreen(vm: MainViewModel) {
 @Composable
 private fun NodeTile(
     node: Node,
+    testing: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onTest: () -> Unit
 ) {
     val accent = latencyColor(node.latencyMs)
     Box(
@@ -184,10 +216,15 @@ private fun NodeTile(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(accent.copy(alpha = 0.16f))
+                        .combinedClickable(onClick = onTest)
                         .padding(horizontal = 7.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = if (node.latencyMs < 0) "--" else "${node.latencyMs}ms",
+                        text = when {
+                            testing -> "…"
+                            node.latencyMs < 0 -> "--"
+                            else -> "${node.latencyMs}ms"
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = accent
@@ -232,34 +269,93 @@ private fun NodeTile(
 @Composable
 private fun AddNodeDialog(
     onDismiss: () -> Unit,
-    onAdd: (String, (String?) -> Unit) -> Unit
+    onAdd: (String, (String?) -> Unit) -> Unit,
+    onAddBatch: (String, (SubscriptionManager.ImportResult) -> Unit) -> Unit,
+    onAddSubscription: (String, (Result<SubscriptionManager.ImportResult>) -> Unit) -> Unit
 ) {
+    var tab by remember { mutableStateOf(0) }
     var link by remember { mutableStateOf("") }
+    var subUrl by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var doneMsg by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("添加节点", color = InkPrimary) },
         text = {
             Column {
-                Text(
-                    text = "粘贴分享链接（vless / vmess / trojan / ss / hysteria2 / tuic）",
-                    fontSize = 12.sp,
-                    color = InkSecondary
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = link,
-                    onValueChange = { link = it; error = null },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("vless://…", color = InkSecondary) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    minLines = 3
-                )
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("链接", "订阅").forEachIndexed { i, label ->
+                        val selected = tab == i
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (selected) AuroraCyan.copy(alpha = 0.2f)
+                                    else Color.Transparent
+                                )
+                                .border(
+                                    1.dp,
+                                    if (selected) AuroraCyan else NightOutline,
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .combinedClickable(onClick = {
+                                    tab = i; error = null; doneMsg = null
+                                })
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 13.sp,
+                                color = if (selected) AuroraCyan else InkSecondary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                if (tab == 0) {
+                    Text(
+                        text = "粘贴分享链接，每行一个，支持批量",
+                        fontSize = 12.sp,
+                        color = InkSecondary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = link,
+                        onValueChange = { link = it; error = null; doneMsg = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("vless://…\nvmess://…", color = InkSecondary) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        minLines = 4
+                    )
+                } else {
+                    Text(
+                        text = "输入订阅链接，自动拉取全部节点",
+                        fontSize = 12.sp,
+                        color = InkSecondary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = subUrl,
+                        onValueChange = { subUrl = it; error = null; doneMsg = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("https://…", color = InkSecondary) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        minLines = 2
+                    )
+                }
                 if (error != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(text = error!!, fontSize = 12.sp, color = SignalError)
+                }
+                if (doneMsg != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = doneMsg!!, fontSize = 12.sp, color = AuroraCyan)
                 }
             }
         },
@@ -268,12 +364,42 @@ private fun AddNodeDialog(
                 enabled = !busy,
                 onClick = {
                     busy = true
-                    onAdd(link) { err ->
-                        busy = false
-                        error = err
+                    error = null
+                    doneMsg = null
+                    if (tab == 0) {
+                        if (link.lines().count { it.trim().contains("://") } <= 1 &&
+                            !link.trim().contains("\n")
+                        ) {
+                            onAdd(link) { err ->
+                                busy = false
+                                error = err
+                                if (err == null) onDismiss()
+                            }
+                        } else {
+                            onAddBatch(link) { res ->
+                                busy = false
+                                doneMsg = "成功导入 ${res.added} 个" +
+                                        if (res.failed > 0) "，${res.failed} 个失败" else ""
+                                if (res.errors.isNotEmpty()) error = res.errors.first()
+                                if (res.added > 0 && res.failed == 0) onDismiss()
+                            }
+                        }
+                    } else {
+                        onAddSubscription(subUrl) { result ->
+                            busy = false
+                            result.fold(
+                                onSuccess = { res ->
+                                    doneMsg = "成功导入 ${res.added} 个" +
+                                            if (res.failed > 0) "，${res.failed} 个失败" else ""
+                                    if (res.errors.isNotEmpty()) error = res.errors.first()
+                                    if (res.added > 0 && res.failed == 0) onDismiss()
+                                },
+                                onFailure = { t -> error = t.message ?: "订阅失败" }
+                            )
+                        }
                     }
                 }
-            ) { Text("添加", color = AuroraCyan) }
+            ) { Text(if (tab == 1) "拉取" else "添加", color = AuroraCyan) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }

@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chan.ciancore.CianCoreApp
+import com.chan.ciancore.core.LatencyTester
+import com.chan.ciancore.data.IpChecker
 import com.chan.ciancore.data.Node
 import com.chan.ciancore.data.NodeDao
 import com.chan.ciancore.data.NodeLinkParser
@@ -43,9 +45,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
+    private val _egressIp = MutableStateFlow<IpChecker.IpInfo?>(null)
+    val egressIp: StateFlow<IpChecker.IpInfo?> = _egressIp.asStateFlow()
+
     init {
         viewModelScope.launch {
             _selectedId.value = withContext(Dispatchers.IO) { dao.getSelected()?.id }
+        }
+        // Refresh egress IP whenever the tunnel connects.
+        viewModelScope.launch {
+            connectionState.collect { state ->
+                if (state == ConnectionState.CONNECTED) {
+                    _egressIp.value = IpChecker.check()
+                } else if (state == ConnectionState.IDLE) {
+                    _egressIp.value = null
+                }
+            }
         }
     }
 
@@ -124,6 +139,101 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             if (_selectedId.value == node.id) _selectedId.value = null
             dao.delete(node)
+        }
+    }
+
+    /** Test state per node id: null = idle, -2 = testing. */
+    private val _testingIds = MutableStateFlow<Set<Long>>(emptySet())
+    val testingIds: StateFlow<Set<Long>> = _testingIds.asStateFlow()
+
+    /** TCP ping test for one node; stores result in DB. */
+    fun testTcpPing(node: Node) {
+        if (_testingIds.value.contains(node.id)) return
+        _testingIds.value = _testingIds.value + node.id
+        viewModelScope.launch {
+            val ms = LatencyTester.tcpPing(node.host, node.port)
+            withContext(Dispatchers.IO) { dao.updateLatency(node.id, ms) }
+            _testingIds.value = _testingIds.value - node.id
+        }
+    }
+
+    /** Real-connection test (full Xray handshake) for one node. */
+    fun testRealConnection(node: Node) {
+        if (_testingIds.value.contains(node.id)) return
+        _testingIds.value = _testingIds.value + node.id
+        viewModelScope.launch {
+            val ms = LatencyTester.realTest(getApplication(), node)
+            // Fall back to TCP ping if the real test fails outright.
+            val final = if (ms < 0) LatencyTester.tcpPing(node.host, node.port) else ms
+            withContext(Dispatchers.IO) { dao.updateLatency(node.id, final) }
+            _testingIds.value = _testingIds.value - node.id
+        }
+    }
+
+    /** Test all nodes sequentially (real connection, TCP fallback). */
+    fun testAllNodes() {
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { dao.getAll() }
+            for (node in list) {
+                if (_testingIds.value.contains(node.id)) continue
+                _testingIds.value = _testingIds.value + node.id
+                val ms = LatencyTester.realTest(getApplication(), node)
+                val final = if (ms < 0) LatencyTester.tcpPing(node.host, node.port) else ms
+                withContext(Dispatchers.IO) { dao.updateLatency(node.id, final) }
+                _testingIds.value = _testingIds.value - node.id
+            }
+        }
+    }
+
+    /**
+     * Batch import from pasted text: one share link per line,
+     * or a base64 subscription blob. Returns (added, failed, errors).
+     */
+    fun addNodesFromText(rawText: String, onDone: (SubscriptionManager.ImportResult) -> Unit) {
+        viewModelScope.launch {
+            val (nodes, errors) = withContext(Dispatchers.Default) {
+                SubscriptionManager.parseBatch(rawText)
+            }
+            var added = 0
+            withContext(Dispatchers.IO) {
+                val hadAny = dao.getAll().isNotEmpty()
+                for (node in nodes) {
+                    dao.insert(node)
+                    added++
+                }
+                // Auto-select the first node if the library was empty.
+                if (!hadAny && added > 0) {
+                    dao.getAll().firstOrNull()?.let {
+                        _selectedId.value = it.id
+                        dao.clearSelection()
+                        dao.selectById(it.id)
+                    }
+                }
+            }
+            onDone(
+                SubscriptionManager.ImportResult(
+                    added = added,
+                    failed = errors.size,
+                    errors = errors.take(5)
+                )
+            )
+        }
+    }
+
+    /** Fetch a subscription URL and import all nodes found. */
+    fun addNodesFromSubscription(subUrl: String, onDone: (Result<SubscriptionManager.ImportResult>) -> Unit) {
+        viewModelScope.launch {
+            val fetchResult = SubscriptionManager.fetchLinks(subUrl)
+            fetchResult.fold(
+                onSuccess = { links ->
+                    if (links.isEmpty()) {
+                        onDone(Result.success(SubscriptionManager.ImportResult(0, 0, listOf("订阅中没有节点"))))
+                    } else {
+                        addNodesFromText(links.joinToString("\n"), { onDone(Result.success(it)) })
+                    }
+                },
+                onFailure = { t -> onDone(Result.failure(t)) }
+            )
         }
     }
 

@@ -53,9 +53,13 @@ import com.chan.ciancore.core.CoreType
  * real preferences land with the feature work.
  */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     var ipv6 by remember { mutableStateOf(true) }
     var autoConnect by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var geoStatus by remember { mutableStateOf<String?>(null) }
+    var geoBusy by remember { mutableStateOf(false) }
+    val routeMode = remember { com.chan.ciancore.data.RoutePrefs.getMode(context) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -90,6 +94,35 @@ fun SettingsScreen() {
                 )
             }
 
+            SettingsGroup(title = "分流") {
+                SettingsRow(
+                    title = "分应用",
+                    value = "按应用控制代理",
+                    onClick = { onNavigate("apps") }
+                )
+                SettingsRow(
+                    title = "路由规则",
+                    value = routeMode.displayName,
+                    onClick = { onNavigate("routing") }
+                )
+                SettingsRow(
+                    title = "Geo 资源",
+                    value = if (geoBusy) "更新中…" else (geoStatus ?: "已内置，点击更新"),
+                    onClick = {
+                        if (geoBusy) return@SettingsRow
+                        geoBusy = true
+                        geoStatus = null
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                            val err = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                com.chan.ciancore.data.GeoManager.update(context)
+                            }
+                            geoBusy = false
+                            geoStatus = err ?: "已更新到最新"
+                        }
+                    }
+                )
+            }
+
             SettingsGroup(title = "核心") {
                 SettingsRow(
                     title = "Xray-core 版本",
@@ -102,15 +135,10 @@ fun SettingsScreen() {
                     onClick = {}
                 )
                 CoreSelectorRow()
-                SettingsRow(
-                    title = "路由规则",
-                    value = "全局代理",
-                    onClick = {}
-                )
             }
 
             SettingsGroup(title = "关于") {
-                SettingsRow(title = "版本", value = "1.0.0", onClick = {})
+                SettingsRow(title = "版本", value = "0.3.0", onClick = {})
                 SettingsRow(title = "开源许可", value = "GPL-3.0", onClick = {})
             }
         }

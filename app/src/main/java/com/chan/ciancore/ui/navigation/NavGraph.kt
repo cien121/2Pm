@@ -43,8 +43,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.chan.ciancore.ui.MainViewModel
+import com.chan.ciancore.ui.screens.AppsScreen
 import com.chan.ciancore.ui.screens.HomeScreen
 import com.chan.ciancore.ui.screens.NodesScreen
+import com.chan.ciancore.ui.screens.RoutingScreen
 import com.chan.ciancore.ui.screens.SettingsScreen
 import com.chan.ciancore.ui.theme.AuroraCyan
 import com.chan.ciancore.ui.theme.InkSecondary
@@ -75,10 +77,12 @@ fun CianCoreNavGraph(
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    val showDock = current in TABS.map { it.route }
 
     Scaffold(
         containerColor = Color.Transparent,
         bottomBar = {
+            if (showDock) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -111,6 +115,7 @@ fun CianCoreNavGraph(
                     }
                 }
             }
+            }
         }
     ) { _ ->
         NavHost(
@@ -120,7 +125,9 @@ fun CianCoreNavGraph(
         ) {
             composable(Dest.Home.route) { HomeScreen(vm, requestVpnPermission) }
             composable(Dest.Nodes.route) { NodesScreen(vm) }
-            composable(Dest.Settings.route) { SettingsScreen() }
+            composable(Dest.Settings.route) { SettingsScreen(onNavigate = { nav.navigate(it) }) }
+            composable("apps") { AppsScreen() }
+            composable("routing") { RoutingScreen() }
         }
     }
 }

@@ -19,7 +19,18 @@ import org.json.JSONObject
 object XrayConfigBuilder {
 
     /** Full runnable config for [node], including TUN plumbing. */
-    fun build(node: Node): String {
+    fun build(node: Node): String = build(node, null, emptyList())
+
+    /**
+     * Full runnable config for [node].
+     * @param routeMode routing preset, null = global proxy.
+     * @param customRules user rules used when [routeMode] is CUSTOM.
+     */
+    fun build(
+        node: Node,
+        routeMode: String?,
+        customRules: List<Triple<String, String, String>>
+    ): String {
         val config = JSONObject()
         config.put("log", JSONObject().put("loglevel", "warning"))
         config.put("stats", JSONObject())
@@ -35,14 +46,25 @@ object XrayConfigBuilder {
                 .put(directOutbound())
                 .put(blockOutbound())
         )
-        config.put(
-            "routing", JSONObject()
-                .put("domainStrategy", "AsIs")
-                .put("rules", JSONArray())
-        )
+        config.put("routing", routingObject(routeMode, customRules))
         config.put(
             "dns", JSONObject()
                 .put("servers", JSONArray().put("1.1.1.1").put("8.8.8.8"))
+        )
+        return config.toString()
+    }
+
+    /**
+     * Minimal config for latency probing: proxy + direct outbounds,
+     * no TUN/socks inbounds. Used with measureOutboundDelay.
+     */
+    fun buildOutboundTest(node: Node): String {
+        val config = JSONObject()
+        config.put("log", JSONObject().put("loglevel", "warning"))
+        config.put(
+            "outbounds", JSONArray()
+                .put(buildOutbound(node))
+                .put(directOutbound())
         )
         return config.toString()
     }
@@ -123,6 +145,65 @@ object XrayConfigBuilder {
             "settings", JSONObject()
                 .put("response", JSONObject().put("type", "http"))
         )
+
+    /**
+     * Routing section.
+     * @param routeMode "GLOBAL", "BYPASS_CN", "CUSTOM" or null (global).
+     * @param customRules list of (kind, value, action) for CUSTOM mode.
+     */
+    private fun routingObject(
+        routeMode: String?,
+        customRules: List<Triple<String, String, String>>
+    ): JSONObject {
+        val rules = JSONArray()
+        when (routeMode) {
+            "BYPASS_CN" -> {
+                rules.put(
+                    JSONObject()
+                        .put("type", "field")
+                        .put("domain", JSONArray().put("geosite:cn"))
+                        .put("outboundTag", "direct")
+                )
+                rules.put(
+                    JSONObject()
+                        .put("type", "field")
+                        .put("ip", JSONArray().put("geoip:cn"))
+                        .put("outboundTag", "direct")
+                )
+            }
+            "CUSTOM" -> {
+                val byAction = customRules.groupBy({ it.third }, { it })
+                for ((action, list) in byAction) {
+                    val tag = when (action) {
+                        "direct" -> "direct"
+                        "block" -> "block"
+                        else -> "proxy"
+                    }
+                    val domains = list.filter { it.first == "domain" }.map { it.second }
+                    val ips = list.filter { it.first == "ip" }.map { it.second }
+                    if (domains.isNotEmpty()) {
+                        rules.put(
+                            JSONObject()
+                                .put("type", "field")
+                                .put("domain", JSONArray(domains))
+                                .put("outboundTag", tag)
+                        )
+                    }
+                    if (ips.isNotEmpty()) {
+                        rules.put(
+                            JSONObject()
+                                .put("type", "field")
+                                .put("ip", JSONArray(ips))
+                                .put("outboundTag", tag)
+                        )
+                    }
+                }
+            }
+        }
+        return JSONObject()
+            .put("domainStrategy", "AsIs")
+            .put("rules", rules)
+    }
 
     // ── per-protocol outbounds ──────────────────────────────────
 

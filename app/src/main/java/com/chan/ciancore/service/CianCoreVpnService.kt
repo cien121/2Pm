@@ -87,7 +87,12 @@ class CianCoreVpnService : VpnService() {
                 throw IllegalStateException("${node.coreType.displayName} 核心下一阶段支持，请先用 Xray 节点")
             }
 
-            val configJson = XrayConfigBuilder.build(node)
+            val configJson = XrayConfigBuilder.build(
+                node,
+                routeMode = com.chan.ciancore.data.RoutePrefs.getMode(this).name,
+                customRules = com.chan.ciancore.data.RoutePrefs.getCustomRules(this)
+                    .map { Triple(it.kind, it.value, it.action) }
+            )
 
             val builder = Builder()
                 .setSession("CianCore")
@@ -97,6 +102,8 @@ class CianCoreVpnService : VpnService() {
                 .addDnsServer("8.8.8.8")
                 .addRoute("0.0.0.0", 0)
                 .addDisallowedApplication(packageName)
+            // Per-app routing.
+            applyPerAppRouting(builder)
             // Close any stale interface before establishing a new one.
             try {
                 tunFd?.close()
@@ -121,6 +128,27 @@ class CianCoreVpnService : VpnService() {
             _state.value = ConnectionState.ERROR
             cleanupLocked()
             stopSelf()
+        }
+    }
+
+    /** Applies per-app allow/block lists to the VPN builder. */
+    private fun applyPerAppRouting(builder: Builder) {
+        val mode = com.chan.ciancore.data.PerAppPrefs.getMode(this)
+        if (mode == com.chan.ciancore.data.PerAppPrefs.Mode.ALL) return
+        val packages = com.chan.ciancore.data.PerAppPrefs.getPackages(this)
+        for (pkg in packages) {
+            if (pkg == packageName) continue
+            try {
+                when (mode) {
+                    com.chan.ciancore.data.PerAppPrefs.Mode.BLOCKLIST ->
+                        builder.addDisallowedApplication(pkg)
+                    com.chan.ciancore.data.PerAppPrefs.Mode.ALLOWLIST ->
+                        builder.addAllowedApplication(pkg)
+                    else -> {}
+                }
+            } catch (_: Throwable) {
+                // Package may be uninstalled; skip.
+            }
         }
     }
 

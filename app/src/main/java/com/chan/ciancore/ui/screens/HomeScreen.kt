@@ -52,6 +52,7 @@ fun HomeScreen(
     val currentSelectedId by vm.selectedId.collectAsState()
     val errorMsg by vm.connectionError.collectAsState()
     val notice by vm.notice.collectAsState()
+    val egressIp by vm.egressIp.collectAsState()
 
     val selectedNode = nodeList.firstOrNull { it.id == currentSelectedId }
 
@@ -83,6 +84,21 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(4.dp))
             StatusLine(state = state, errorMsg = errorMsg, notice = notice)
+            // Egress IP, auto-detected v4/v6.
+            if (state == ConnectionState.CONNECTED) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = if (egressIp != null) {
+                        "出口 ${egressIp!!.ip} · ${if (egressIp!!.isV6) "IPv6" else "IPv4"}"
+                    } else {
+                        "出口检测中…"
+                    },
+                    fontSize = 12.sp,
+                    color = InkSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+            }
             Spacer(Modifier.height(28.dp))
 
             // The orb
