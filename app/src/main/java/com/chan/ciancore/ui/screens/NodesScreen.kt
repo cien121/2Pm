@@ -654,12 +654,25 @@ private fun EditNodeDialog(
     var echConfigList by remember(key) { mutableStateOf(node.echConfigList) }
     var peerCertSha256 by remember(key) { mutableStateOf(node.peerCertSha256) }
     var verifyPeerCertByName by remember(key) { mutableStateOf(node.verifyPeerCertByName) }
+    var coreType by remember(key) { mutableStateOf(node.coreType) }
     var error by remember(key) { mutableStateOf<String?>(null) }
 
     val isHy2 = proto == "hysteria2" || proto == "hy2"
     val isStream = proto == "vless" || proto == "vmess" || proto == "trojan"
     val showTls = security == "tls" || proto == "trojan" || isHy2
     val showReality = security == "reality"
+    // Core selection rules: xhttp must use Xray; hy2 can choose; others default Xray.
+    val isXhttp = network == "xhttp"
+    val coreLocked = isXhttp
+    val coreOptions = if (isHy2) {
+        listOf(com.chan.ciancore.core.CoreType.XRAY, com.chan.ciancore.core.CoreType.SING_BOX)
+    } else {
+        listOf(com.chan.ciancore.core.CoreType.XRAY)
+    }
+    // Force Xray for xhttp
+    if (isXhttp && coreType != com.chan.ciancore.core.CoreType.XRAY) {
+        coreType = com.chan.ciancore.core.CoreType.XRAY
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -676,6 +689,26 @@ private fun EditNodeDialog(
                     "端口", port,
                     onChange = { port = it.filter { c -> c.isDigit() }; error = null }
                 )
+
+                // Core selector: hy2 can choose, xhttp locked to Xray
+                if (coreOptions.size > 1) {
+                    EditSection("核心")
+                    EditChipsPairs(
+                        "核心",
+                        coreOptions.map { it.displayName to it.displayName },
+                        coreType.displayName,
+                        onSelect = { selected ->
+                            coreType = coreOptions.first { it.displayName == selected }
+                        }
+                    )
+                } else if (coreLocked) {
+                    EditSection("核心")
+                    Text(
+                        "Xray（xhttp 必须）",
+                        color = InkSecondary,
+                        fontSize = 12.sp
+                    )
+                }
 
                 EditSection("认证")
                 when (proto) {
@@ -830,7 +863,8 @@ private fun EditNodeDialog(
                             finalMaskJson = finalMaskJson,
                             echConfigList = echConfigList,
                             peerCertSha256 = peerCertSha256,
-                            verifyPeerCertByName = verifyPeerCertByName
+                            verifyPeerCertByName = verifyPeerCertByName,
+                            coreType = coreType
                         )
                     )
                 }
