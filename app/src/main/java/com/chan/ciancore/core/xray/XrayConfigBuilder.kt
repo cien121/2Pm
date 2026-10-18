@@ -18,19 +18,24 @@ import org.json.JSONObject
  */
 object XrayConfigBuilder {
 
+    /** All tunable options for a generated config. */
+    data class BuildOptions(
+        val routeMode: String? = null,
+        val customRules: List<Triple<String, String, String>> = emptyList(),
+        val remoteDns: String = "",
+        val directDns: String = "",
+        val fakeDns: Boolean = false,
+        val bypassLan: Boolean = true
+    )
+
     /** Full runnable config for [node], including TUN plumbing. */
-    fun build(node: Node): String = build(node, null, emptyList())
+    fun build(node: Node): String = build(node, BuildOptions())
 
     /**
      * Full runnable config for [node].
-     * @param routeMode routing preset, null = global proxy.
-     * @param customRules user rules used when [routeMode] is CUSTOM.
+     * @param options routing + DNS tuning.
      */
-    fun build(
-        node: Node,
-        routeMode: String?,
-        customRules: List<Triple<String, String, String>>
-    ): String {
+    fun build(node: Node, options: BuildOptions): String {
         val config = JSONObject()
         config.put("log", JSONObject().put("loglevel", "warning"))
         config.put("stats", JSONObject())
@@ -46,13 +51,26 @@ object XrayConfigBuilder {
                 .put(directOutbound())
                 .put(blockOutbound())
         )
-        config.put("routing", routingObject(routeMode, customRules))
-        config.put(
-            "dns", JSONObject()
-                .put("servers", JSONArray().put("1.1.1.1").put("8.8.8.8"))
-        )
+        config.put("routing", routingObject(options))
+        config.put("dns", dnsObject(options))
+        if (options.fakeDns) {
+            config.put(
+                "fakedns", JSONArray().put(
+                    JSONObject()
+                        .put("ipPool", "198.18.0.0/15")
+                        .put("poolSize", 10000)
+                )
+            )
+        }
         return config.toString()
     }
+
+    /** Backwards-compatible overload. */
+    fun build(
+        node: Node,
+        routeMode: String?,
+        customRules: List<Triple<String, String, String>>
+    ): String = build(node, BuildOptions(routeMode = routeMode, customRules = customRules))
 
     /**
      * Minimal config for latency probing: proxy + direct outbounds,
@@ -148,15 +166,19 @@ object XrayConfigBuilder {
 
     /**
      * Routing section.
-     * @param routeMode "GLOBAL", "BYPASS_CN", "CUSTOM" or null (global).
-     * @param customRules list of (kind, value, action) for CUSTOM mode.
      */
-    private fun routingObject(
-        routeMode: String?,
-        customRules: List<Triple<String, String, String>>
-    ): JSONObject {
+    private fun routingObject(options: BuildOptions): JSONObject {
         val rules = JSONArray()
-        when (routeMode) {
+        // LAN always bypasses when enabled (geoip:private covers RFC1918 etc.).
+        if (options.bypassLan) {
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("ip", JSONArray().put("geoip:private"))
+                    .put("outboundTag", "direct")
+            )
+        }
+        when (options.routeMode) {
             "BYPASS_CN" -> {
                 rules.put(
                     JSONObject()
@@ -172,7 +194,7 @@ object XrayConfigBuilder {
                 )
             }
             "CUSTOM" -> {
-                val byAction = customRules.groupBy({ it.third }, { it })
+                val byAction = options.customRules.groupBy({ it.third }, { it })
                 for ((action, list) in byAction) {
                     val tag = when (action) {
                         "direct" -> "direct"
@@ -203,6 +225,30 @@ object XrayConfigBuilder {
         return JSONObject()
             .put("domainStrategy", "AsIs")
             .put("rules", rules)
+    }
+
+    /**
+     * DNS section: split-horizon remote/direct DNS, optional FakeDNS.
+     */
+    private fun dnsObject(options: BuildOptions): JSONObject {
+        val servers = JSONArray()
+        if (options.fakeDns) {
+            servers.put("fakedns")
+        }
+        val remote = options.remoteDns.ifBlank { "1.1.1.1" }
+        val direct = options.directDns.ifBlank { "223.5.5.5" }
+        if (options.routeMode == "BYPASS_CN" || options.routeMode == "CUSTOM") {
+            // Mainland domains resolve via direct DNS (no poisoning).
+            servers.put(
+                JSONObject()
+                    .put("address", direct)
+                    .put("domains", JSONArray().put("geosite:cn"))
+            )
+        }
+        servers.put(remote)
+        // Final fallback.
+        if (remote != "1.1.1.1") servers.put("1.1.1.1")
+        return JSONObject().put("servers", servers)
     }
 
     // ── per-protocol outbounds ──────────────────────────────────

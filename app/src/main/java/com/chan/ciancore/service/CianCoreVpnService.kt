@@ -19,6 +19,13 @@ import com.chan.ciancore.core.CoreRegistry
 import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.xray.XrayConfigBuilder
 import com.chan.ciancore.core.xray.XrayCore
+import com.chan.ciancore.data.DnsPrefs.bypassLan
+import com.chan.ciancore.data.DnsPrefs.directDns
+import com.chan.ciancore.data.DnsPrefs.fakeDns
+import com.chan.ciancore.data.DnsPrefs.remoteDns
+import com.chan.ciancore.data.DnsPrefs.vpnAddress
+import com.chan.ciancore.data.DnsPrefs.vpnDns
+import com.chan.ciancore.data.DnsPrefs.vpnMtu
 import com.chan.ciancore.data.Node
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,17 +96,34 @@ class CianCoreVpnService : VpnService() {
 
             val configJson = XrayConfigBuilder.build(
                 node,
-                routeMode = com.chan.ciancore.data.RoutePrefs.getMode(this).name,
-                customRules = com.chan.ciancore.data.RoutePrefs.getCustomRules(this)
-                    .map { Triple(it.kind, it.value, it.action) }
+                XrayConfigBuilder.BuildOptions(
+                    routeMode = com.chan.ciancore.data.RoutePrefs.getMode(this).name,
+                    customRules = com.chan.ciancore.data.RoutePrefs.getCustomRules(this)
+                        .map { Triple(it.kind, it.value, it.action) },
+                    remoteDns = remoteDns,
+                    directDns = directDns,
+                    fakeDns = fakeDns,
+                    bypassLan = bypassLan
+                )
             )
 
             val builder = Builder()
                 .setSession("CianCore")
-                .setMtu(VPN_MTU)
-                .addAddress(VPN_ADDRESS, 32)
-                .addDnsServer("1.1.1.1")
-                .addDnsServer("8.8.8.8")
+                .setMtu(vpnMtu)
+            try {
+                builder.addAddress(vpnAddress, 32)
+            } catch (_: Throwable) {
+                builder.addAddress(VPN_ADDRESS, 32)
+            }
+            // VPN interface DNS servers (configurable).
+            vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                .forEach { dns ->
+                    try {
+                        builder.addDnsServer(dns)
+                    } catch (_: Throwable) {
+                    }
+                }
+            builder
                 .addRoute("0.0.0.0", 0)
                 .addDisallowedApplication(packageName)
             // Per-app routing.

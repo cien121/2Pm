@@ -100,11 +100,14 @@ class XrayCore(private val appContext: Context) : ProxyCore {
         }
 
     override suspend fun measureLatency(configJson: String): Long =
+        measureLatency(configJson, DELAY_TEST_URL)
+
+    suspend fun measureLatency(configJson: String, testUrl: String): Long =
         withContext(Dispatchers.IO) {
             try {
                 initialize(appContext)
                 // Ephemeral instance; does not disturb the running controller.
-                Libv2ray.measureOutboundDelay(configJson, DELAY_TEST_URL)
+                Libv2ray.measureOutboundDelay(configJson, testUrl)
             } catch (t: Throwable) {
                 Log.w(TAG, "measureLatency failed", t)
                 -1L

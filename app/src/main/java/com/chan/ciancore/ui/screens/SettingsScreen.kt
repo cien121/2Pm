@@ -45,6 +45,10 @@ import com.chan.ciancore.ui.theme.NightOutline
 import com.chan.ciancore.ui.theme.NightSurface
 import com.chan.ciancore.core.CoreRegistry
 import com.chan.ciancore.core.CoreType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Settings — quiet control room.
@@ -106,14 +110,19 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     onClick = { onNavigate("routing") }
                 )
                 SettingsRow(
+                    title = "DNS 与网络",
+                    value = "DNS / 测速 / VPN 参数",
+                    onClick = { onNavigate("dns") }
+                )
+                SettingsRow(
                     title = "Geo 资源",
                     value = if (geoBusy) "更新中…" else (geoStatus ?: "已内置，点击更新"),
                     onClick = {
                         if (geoBusy) return@SettingsRow
                         geoBusy = true
                         geoStatus = null
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                            val err = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            val err = withContext(Dispatchers.IO) {
                                 com.chan.ciancore.data.GeoManager.update(context)
                             }
                             geoBusy = false

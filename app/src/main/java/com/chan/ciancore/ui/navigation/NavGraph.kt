@@ -44,6 +44,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.chan.ciancore.ui.MainViewModel
 import com.chan.ciancore.ui.screens.AppsScreen
+import com.chan.ciancore.ui.screens.DnsScreen
 import com.chan.ciancore.ui.screens.HomeScreen
 import com.chan.ciancore.ui.screens.NodesScreen
 import com.chan.ciancore.ui.screens.RoutingScreen
@@ -128,6 +129,7 @@ fun CianCoreNavGraph(
             composable(Dest.Settings.route) { SettingsScreen(onNavigate = { nav.navigate(it) }) }
             composable("apps") { AppsScreen() }
             composable("routing") { RoutingScreen() }
+            composable("dns") { DnsScreen() }
         }
     }
 }

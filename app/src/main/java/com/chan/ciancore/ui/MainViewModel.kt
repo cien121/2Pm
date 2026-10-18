@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chan.ciancore.CianCoreApp
 import com.chan.ciancore.core.LatencyTester
+import com.chan.ciancore.data.DnsPrefs.concurrentTests
 import com.chan.ciancore.data.IpChecker
 import com.chan.ciancore.data.Node
 import com.chan.ciancore.data.NodeDao
@@ -56,7 +57,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             connectionState.collect { state ->
                 if (state == ConnectionState.CONNECTED) {
-                    _egressIp.value = IpChecker.check()
+                    _egressIp.value = IpChecker.check(getApplication())
                 } else if (state == ConnectionState.IDLE) {
                     _egressIp.value = null
                 }
@@ -170,17 +171,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Test all nodes sequentially (real connection, TCP fallback). */
+    /** Test all nodes with the configured concurrency. */
     fun testAllNodes() {
         viewModelScope.launch {
+            val ctx = getApplication<Application>()
             val list = withContext(Dispatchers.IO) { dao.getAll() }
-            for (node in list) {
-                if (_testingIds.value.contains(node.id)) continue
-                _testingIds.value = _testingIds.value + node.id
-                val ms = LatencyTester.realTest(getApplication(), node)
-                val final = if (ms < 0) LatencyTester.tcpPing(node.host, node.port) else ms
-                withContext(Dispatchers.IO) { dao.updateLatency(node.id, final) }
-                _testingIds.value = _testingIds.value - node.id
+            val pending = list.filter { !_testingIds.value.contains(it.id) }
+            _testingIds.value = _testingIds.value + pending.map { it.id }
+            try {
+                LatencyTester.testAll(
+                    ctx,
+                    pending,
+                    ctx.concurrentTests
+                ) { node, ms ->
+                    withContext(Dispatchers.IO) { dao.updateLatency(node.id, ms) }
+                    _testingIds.value = _testingIds.value - node.id
+                }
+            } finally {
+                _testingIds.value = emptySet()
             }
         }
     }

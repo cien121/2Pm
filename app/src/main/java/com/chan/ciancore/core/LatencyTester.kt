@@ -3,8 +3,13 @@ package com.chan.ciancore.core
 import android.content.Context
 import com.chan.ciancore.core.xray.XrayConfigBuilder
 import com.chan.ciancore.core.xray.XrayCore
+import com.chan.ciancore.data.DnsPrefs.testUrl
 import com.chan.ciancore.data.Node
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -13,7 +18,8 @@ import java.net.Socket
  * Latency testing: TCP ping + real-connection (Xray handshake) test.
  *
  * - tcpPing: raw TCP connect timing to host:port.
- * - realTest: full Xray outbound dial + HTTP 204 round trip.
+ * - realTest: full Xray outbound dial + HTTP round trip to the
+ *   user-configured test URL.
  * Returns milliseconds, or -1 on failure.
  */
 object LatencyTester {
@@ -42,9 +48,32 @@ object LatencyTester {
             try {
                 if (node.coreType != CoreType.XRAY) return@withContext -1L
                 val config = XrayConfigBuilder.buildOutboundTest(node)
-                XrayCore(context.applicationContext).measureLatency(config)
+                val url = context.testUrl.ifBlank { XrayCore.DELAY_TEST_URL }
+                XrayCore(context.applicationContext).measureLatency(config, url)
             } catch (_: Throwable) {
                 -1L
             }
         }
+
+    /**
+     * Test many nodes with bounded concurrency.
+     * Calls [onResult] for each finished node.
+     */
+    suspend fun testAll(
+        context: Context,
+        nodes: List<Node>,
+        maxConcurrent: Int,
+        onResult: suspend (Node, Long) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val semaphore = Semaphore(maxConcurrent.coerceIn(1, 32))
+        nodes.map { node ->
+            async {
+                semaphore.withPermit {
+                    val ms = realTest(context, node)
+                    val final = if (ms < 0) tcpPing(node.host, node.port) else ms
+                    onResult(node, final)
+                }
+            }
+        }.awaitAll()
+    }
 }
