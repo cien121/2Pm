@@ -63,7 +63,7 @@ jobs:
           gomobile bind \
             -androidapi 24 \
             -trimpath \
-            -ldflags='-s -w -buildid=' \
+            -ldflags='-s -w -buildid= -checklinkname=0' \
             -o /tmp/libbox.aar \
             ./experimental/libbox
           cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
