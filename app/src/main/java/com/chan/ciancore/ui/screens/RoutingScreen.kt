@@ -475,6 +475,7 @@ private fun RuleEditDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChipOption(
     label: String,
