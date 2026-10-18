@@ -199,6 +199,7 @@ object XrayConfigBuilder {
         val server = JSONObject()
             .put("address", n.host)
             .put("port", n.port)
+            .put("version", 2)
         val stream = JSONObject()
             .put("network", "hysteria")
             .put("security", "tls")
