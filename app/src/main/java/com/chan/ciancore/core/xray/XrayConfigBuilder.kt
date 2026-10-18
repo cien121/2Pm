@@ -357,12 +357,14 @@ object XrayConfigBuilder {
                     .put("auth", n.uuid)
             )
         val quicParams = JSONObject()
-        if (n.bandwidthUp.isNotBlank()) {
-            quicParams.put("brutalUp", n.bandwidthUp)
+        val upBw = normalizeBandwidth(n.bandwidthUp)
+        if (upBw.isNotBlank()) {
+            quicParams.put("brutalUp", upBw)
             quicParams.put("congestion", "brutal")
         }
-        if (n.bandwidthDown.isNotBlank()) {
-            quicParams.put("brutalDown", n.bandwidthDown)
+        val downBw = normalizeBandwidth(n.bandwidthDown)
+        if (downBw.isNotBlank()) {
+            quicParams.put("brutalDown", downBw)
             quicParams.put("congestion", "brutal")
         }
         if (n.portHopping.isNotBlank()) {
@@ -398,6 +400,19 @@ object XrayConfigBuilder {
             .put("protocol", "hysteria")
             .put("settings", settings)
             .put("streamSettings", stream)
+    }
+
+    /**
+     * Normalize a user-entered bandwidth string for Xray.
+     * Xray parses "50 mbps" / "50mbps" / "50m" etc.; a bare number
+     * would mean bytes/sec and trip the 65536 Bps minimum, so treat
+     * bare numbers as mbps (matches v2rayNG's upmbps/downmbps).
+     */
+    private fun normalizeBandwidth(raw: String): String {
+        val t = raw.trim().lowercase()
+        if (t.isEmpty()) return ""
+        if (t.matches(Regex("[0-9.]+"))) return "$t mbps"
+        return t
     }
 
     // ── stream settings ─────────────────────────────────────────
