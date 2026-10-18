@@ -414,6 +414,9 @@ private fun AddNodeDialog(
         "socks" to "SOCKS",
         "http" to "HTTP",
         "hysteria2" to "Hysteria2",
+        "tuic" to "TUIC",
+        "wireguard" to "WireGuard",
+        "anytls" to "AnyTLS",
         "chain" to "⛓️ 链式代理"
     )
 

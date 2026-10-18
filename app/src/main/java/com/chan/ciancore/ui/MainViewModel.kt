@@ -285,11 +285,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Create a blank node for manual editing. Returns the inserted node. */
     fun createManualNode(protocol: String, onDone: (Node) -> Unit) {
         viewModelScope.launch {
+            // sing-box only protocols get SING_BOX core automatically
+            val coreType = when (protocol.lowercase()) {
+                "tuic", "wireguard", "anytls" -> com.chan.ciancore.core.CoreType.SING_BOX
+                else -> com.chan.ciancore.core.CoreType.XRAY
+            }
             val node = Node(
                 name = "新节点",
                 rawLink = "",
                 protocol = protocol,
-                network = "tcp"
+                network = "tcp",
+                coreType = coreType
             )
             val id = withContext(Dispatchers.IO) { dao.insert(node) }
             onDone(node.copy(id = id))
