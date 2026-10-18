@@ -5,6 +5,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import com.chan.ciancore.CianCoreApp
 import com.chan.ciancore.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Quick Settings tile: tap to toggle the VPN tunnel.
@@ -25,7 +27,15 @@ class CianCoreTileService : TileService() {
         super.onStartListening()
         scope.launch {
             val state = CianCoreVpnService.state.first()
-            updateTile(state == CianCoreVpnService.ConnectionState.CONNECTED)
+            val connected = state == CianCoreVpnService.ConnectionState.CONNECTED
+            // Show the selected node name on the tile, like v2rayNG does.
+            val nodeName = try {
+                val dao = CianCoreApp.instance.database.nodeDao()
+                withContext(Dispatchers.IO) {
+                    dao.getSelected()?.name
+                }
+            } catch (_: Throwable) { null }
+            updateTile(connected, nodeName)
         }
     }
 
@@ -52,10 +62,11 @@ class CianCoreTileService : TileService() {
         }
     }
 
-    private fun updateTile(connected: Boolean) {
+    private fun updateTile(connected: Boolean, nodeName: String? = null) {
         qsTile?.let { tile ->
             tile.state = if (connected) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-            tile.label = getString(R.string.app_name)
+            // Show node name like v2rayNG: tap toggles that node.
+            tile.label = nodeName ?: getString(R.string.app_name)
             tile.subtitle = if (connected) "已连接" else "未连接"
             try {
                 tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_vpn)
