@@ -63,6 +63,7 @@ import com.chan.ciancore.ui.theme.latencyColor
  * Two-column mosaic of node tiles with latency glow instead of a
  * spreadsheet. Tap selects, long-press deletes, FAB pastes a share link.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NodesScreen(vm: MainViewModel) {
     val nodeList by vm.nodes.collectAsState()
@@ -266,6 +267,7 @@ private fun NodeTile(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AddNodeDialog(
     onDismiss: () -> Unit,
