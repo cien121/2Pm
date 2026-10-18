@@ -15,10 +15,15 @@ import java.net.URL
  */
 object GeoManager {
 
-    const val GEOIP_URL =
+    // jsdelivr is fast inside mainland China; GitHub releases as fallback.
+    private val GEOIP_URLS = listOf(
+        "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat",
         "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
-    const val GEOSITE_URL =
+    )
+    private val GEOSITE_URLS = listOf(
+        "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat",
         "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+    )
 
     fun assetDir(context: Context): File =
         File(context.filesDir, "xray").apply { mkdirs() }
@@ -48,27 +53,61 @@ object GeoManager {
 
     /**
      * Download fresh geo files, replacing the local copies.
-     * Returns null on success, or an error message.
+     * Tries each mirror in order. Returns null on success, or an error message.
+     * @param onProgress called with (fileLabel, downloadedBytes, totalBytes or -1).
      */
-    suspend fun update(context: Context): String? = withContext(Dispatchers.IO) {
-        downloadTo(GEOIP_URL, geoipFile(context)) ?:
-        downloadTo(GEOSITE_URL, geositeFile(context))
+    suspend fun update(
+        context: Context,
+        onProgress: (String, Long, Long) -> Unit = { _, _, _ -> }
+    ): String? = withContext(Dispatchers.IO) {
+        downloadTo(GEOIP_URLS, "geoip.dat", geoipFile(context), onProgress)
+            ?: downloadTo(GEOSITE_URLS, "geosite.dat", geositeFile(context), onProgress)
     }
 
-    private fun downloadTo(url: String, dest: File): String? {
+    private fun downloadTo(
+        urls: List<String>,
+        label: String,
+        dest: File,
+        onProgress: (String, Long, Long) -> Unit
+    ): String? {
+        var lastError: String? = null
+        for (url in urls) {
+            lastError = tryDownload(url, label, dest, onProgress)
+            if (lastError == null) return null
+        }
+        return lastError
+    }
+
+    private fun tryDownload(
+        url: String,
+        label: String,
+        dest: File,
+        onProgress: (String, Long, Long) -> Unit
+    ): String? {
         return try {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 20000
-                readTimeout = 60000
+                connectTimeout = 15000
+                readTimeout = 30000
                 instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "CianCore/1.0")
             }
             try {
                 val code = conn.responseCode
                 if (code !in 200..299) return "下载失败：HTTP $code"
+                val total = conn.contentLengthLong
                 val tmp = File(dest.parent, dest.name + ".tmp")
+                var downloaded = 0L
                 conn.inputStream.use { input ->
-                    tmp.outputStream().use { output -> input.copyTo(output) }
+                    tmp.outputStream().use { output ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            output.write(buf, 0, n)
+                            downloaded += n
+                            onProgress(label, downloaded, total)
+                        }
+                    }
                 }
                 if (tmp.length() < 1024 * 100) {
                     tmp.delete()

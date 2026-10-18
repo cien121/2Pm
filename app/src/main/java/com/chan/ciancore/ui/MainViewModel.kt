@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chan.ciancore.CianCoreApp
+import com.chan.ciancore.core.CoreRegistry
 import com.chan.ciancore.core.LatencyTester
 import com.chan.ciancore.data.DnsPrefs.concurrentTests
 import com.chan.ciancore.data.IpChecker
@@ -15,11 +16,13 @@ import com.chan.ciancore.data.SubscriptionManager
 import com.chan.ciancore.service.CianCoreVpnService
 import com.chan.ciancore.service.CianCoreVpnService.ConnectionState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -50,6 +53,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _egressIp = MutableStateFlow<IpChecker.IpInfo?>(null)
     val egressIp: StateFlow<IpChecker.IpInfo?> = _egressIp.asStateFlow()
 
+    /** Live traffic speed in bytes/sec, polled while connected. */
+    data class TrafficSpeed(val downBps: Long = 0, val upBps: Long = 0)
+    private val _trafficSpeed = MutableStateFlow(TrafficSpeed())
+    val trafficSpeed: StateFlow<TrafficSpeed> = _trafficSpeed.asStateFlow()
+
     init {
         viewModelScope.launch {
             _selectedId.value = withContext(Dispatchers.IO) { dao.getSelected()?.id }
@@ -62,6 +70,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 } else if (state == ConnectionState.IDLE) {
                     _egressIp.value = null
                 }
+            }
+        }
+        // Poll traffic stats while connected (2s cadence).
+        viewModelScope.launch {
+            var lastTx = 0L
+            var lastRx = 0L
+            var lastAt = 0L
+            while (isActive) {
+                if (connectionState.value == ConnectionState.CONNECTED) {
+                    try {
+                        val stats = withContext(Dispatchers.IO) {
+                            CoreRegistry.getOrNull(
+                                com.chan.ciancore.core.CoreType.XRAY
+                            )?.queryTrafficStats()
+                        }
+                        val now = System.currentTimeMillis()
+                        if (stats != null && lastAt > 0) {
+                            val dt = (now - lastAt).coerceAtLeast(1) / 1000.0
+                            val down = ((stats.rxBytes - lastRx).coerceAtLeast(0) / dt).toLong()
+                            val up = ((stats.txBytes - lastTx).coerceAtLeast(0) / dt).toLong()
+                            _trafficSpeed.value = TrafficSpeed(down, up)
+                        }
+                        if (stats != null) {
+                            lastTx = stats.txBytes
+                            lastRx = stats.rxBytes
+                            lastAt = now
+                        }
+                    } catch (_: Throwable) {
+                        // Keep last known speed.
+                    }
+                } else {
+                    lastAt = 0L
+                    if (_trafficSpeed.value != TrafficSpeed()) {
+                        _trafficSpeed.value = TrafficSpeed()
+                    }
+                }
+                delay(2000)
             }
         }
     }

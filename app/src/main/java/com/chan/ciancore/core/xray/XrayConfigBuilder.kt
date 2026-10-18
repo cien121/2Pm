@@ -1,6 +1,7 @@
 package com.chan.ciancore.core.xray
 
 import com.chan.ciancore.data.Node
+import com.chan.ciancore.data.RoutePrefs
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -20,12 +21,11 @@ object XrayConfigBuilder {
 
     /** All tunable options for a generated config. */
     data class BuildOptions(
-        val routeMode: String? = null,
-        val customRules: List<Triple<String, String, String>> = emptyList(),
+        val routingRules: List<RoutePrefs.RoutingRule> = emptyList(),
+        val domainStrategy: String = "AsIs",
         val remoteDns: String = "",
         val directDns: String = "",
         val fakeDns: Boolean = false,
-        val bypassLan: Boolean = true,
         /**
          * Chain proxy: when set (and different from the main node),
          * the main outbound dials through this node's outbound
@@ -183,64 +183,54 @@ object XrayConfigBuilder {
 
     /**
      * Routing section.
+     *
+     * Rule order matters (first match wins):
+     * 1. DNS anti-leak (locked): UDP port 53 -> Xray's built-in DNS.
+     *    Every DNS query is answered inside the tunnel — it can never
+     *    leak to the ISP or a third-party resolver.
+     * 2. User rules (enabled only), in list order.
      */
     private fun routingObject(options: BuildOptions): JSONObject {
         val rules = JSONArray()
-        // LAN always bypasses when enabled (geoip:private covers RFC1918 etc.).
-        if (options.bypassLan) {
-            rules.put(
-                JSONObject()
-                    .put("type", "field")
-                    .put("ip", JSONArray().put("geoip:private"))
-                    .put("outboundTag", "direct")
-            )
-        }
-        when (options.routeMode) {
-            "BYPASS_CN" -> {
-                rules.put(
-                    JSONObject()
-                        .put("type", "field")
-                        .put("domain", JSONArray().put("geosite:cn"))
-                        .put("outboundTag", "direct")
-                )
-                rules.put(
-                    JSONObject()
-                        .put("type", "field")
-                        .put("ip", JSONArray().put("geoip:cn"))
-                        .put("outboundTag", "direct")
-                )
+        // 1. DNS anti-leak — always first, always on.
+        rules.put(
+            JSONObject()
+                .put("type", "field")
+                .put("port", 53)
+                .put("network", "udp")
+                .put("outboundTag", "dns")
+        )
+        // 2. User rules.
+        for (rule in options.routingRules) {
+            if (!rule.enabled) continue
+            val field = JSONObject().put("type", "field")
+            if (rule.domains.isNotEmpty()) {
+                field.put("domain", JSONArray(rule.domains))
             }
-            "CUSTOM" -> {
-                val byAction = options.customRules.groupBy({ it.third }, { it })
-                for ((action, list) in byAction) {
-                    val tag = when (action) {
-                        "direct" -> "direct"
-                        "block" -> "block"
-                        else -> "proxy"
-                    }
-                    val domains = list.filter { it.first == "domain" }.map { it.second }
-                    val ips = list.filter { it.first == "ip" }.map { it.second }
-                    if (domains.isNotEmpty()) {
-                        rules.put(
-                            JSONObject()
-                                .put("type", "field")
-                                .put("domain", JSONArray(domains))
-                                .put("outboundTag", tag)
-                        )
-                    }
-                    if (ips.isNotEmpty()) {
-                        rules.put(
-                            JSONObject()
-                                .put("type", "field")
-                                .put("ip", JSONArray(ips))
-                                .put("outboundTag", tag)
-                        )
-                    }
-                }
+            if (rule.ips.isNotEmpty()) {
+                field.put("ip", JSONArray(rule.ips))
             }
+            if (rule.port.isNotBlank()) {
+                // Xray accepts "443" or "443,8443" or "1000-2000".
+                field.put("port", rule.port)
+            }
+            if (rule.network.isNotBlank()) {
+                field.put("network", rule.network)
+            }
+            val tag = when (rule.outboundTag) {
+                "direct" -> "direct"
+                "block" -> "block"
+                else -> "proxy"
+            }
+            field.put("outboundTag", tag)
+            // Skip empty rules (no match criteria at all).
+            if (!field.has("domain") && !field.has("ip") &&
+                !field.has("port")
+            ) continue
+            rules.put(field)
         }
         return JSONObject()
-            .put("domainStrategy", "AsIs")
+            .put("domainStrategy", options.domainStrategy.ifBlank { "AsIs" })
             .put("rules", rules)
     }
 
@@ -254,14 +244,13 @@ object XrayConfigBuilder {
         }
         val remote = options.remoteDns.ifBlank { "1.1.1.1" }
         val direct = options.directDns.ifBlank { "223.5.5.5" }
-        if (options.routeMode == "BYPASS_CN" || options.routeMode == "CUSTOM") {
-            // Mainland domains resolve via direct DNS (no poisoning).
-            servers.put(
-                JSONObject()
-                    .put("address", direct)
-                    .put("domains", JSONArray().put("geosite:cn"))
-            )
-        }
+        // Mainland domains resolve via direct DNS (no poisoning).
+        // Foreign domains go through the tunnel via the remote resolver.
+        servers.put(
+            JSONObject()
+                .put("address", direct)
+                .put("domains", JSONArray().put("geosite:cn"))
+        )
         servers.put(remote)
         // Final fallback.
         if (remote != "1.1.1.1") servers.put("1.1.1.1")
@@ -387,23 +376,30 @@ object XrayConfigBuilder {
             quicParams.put(
                 "udpHop", JSONObject()
                     .put("ports", n.portHopping)
-                    .put("interval", "30")
+                    .put("interval", n.hopInterval.ifBlank { "30" })
             )
         }
-        val finalmask = JSONObject().put("quicParams", quicParams)
-        if (n.obfsPassword.isNotBlank()) {
-            finalmask.put(
-                "udp", JSONArray().put(
-                    JSONObject()
-                        .put("type", "salamander")
-                        .put(
-                            "settings", JSONObject()
-                                .put("password", n.obfsPassword)
-                        )
+        // Raw FinalMask JSON overrides the structured builder output.
+        val rawFinalMask = n.finalMaskJson.trim().takeIf { it.isNotBlank() }
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+        if (rawFinalMask != null) {
+            stream.put("finalmask", rawFinalMask)
+        } else {
+            val finalmask = JSONObject().put("quicParams", quicParams)
+            if (n.obfsPassword.isNotBlank()) {
+                finalmask.put(
+                    "udp", JSONArray().put(
+                        JSONObject()
+                            .put("type", "salamander")
+                            .put(
+                                "settings", JSONObject()
+                                    .put("password", n.obfsPassword)
+                            )
+                    )
                 )
-            )
+            }
+            stream.put("finalmask", finalmask)
         }
-        stream.put("finalmask", finalmask)
         return JSONObject()
             .put("tag", "proxy")
             .put("protocol", "hysteria")
@@ -447,11 +443,14 @@ object XrayConfigBuilder {
                 )
             }
             "xhttp" -> {
-                ss.put(
-                    "xhttpSettings", JSONObject()
-                        .put("path", n.wsPath.ifEmpty { "/" })
-                        .put("host", n.wsHost)
-                )
+                val xhttp = JSONObject()
+                    .put("path", n.wsPath.ifEmpty { "/" })
+                    .put("host", n.wsHost)
+                if (n.xhttpMode.isNotBlank()) xhttp.put("mode", n.xhttpMode)
+                if (n.xhttpExtra.isNotBlank()) {
+                    runCatching { xhttp.put("extra", JSONObject(n.xhttpExtra)) }
+                }
+                ss.put("xhttpSettings", xhttp)
             }
             "h2", "http" -> {
                 ss.put("network", "h2")
@@ -485,6 +484,10 @@ object XrayConfigBuilder {
             val key = if (n.security == "tls") "tlsSettings" else "realitySettings"
             ss.put(key, tlsSettings(n))
         }
+        // Raw FinalMask JSON (advanced override).
+        n.finalMaskJson.trim().takeIf { it.isNotBlank() }?.let { raw ->
+            runCatching { ss.put("finalmask", JSONObject(raw)) }
+        }
         return ss
     }
 
@@ -503,6 +506,11 @@ object XrayConfigBuilder {
         if (n.pbk.isNotBlank()) tls.put("publicKey", n.pbk)
         if (n.sid.isNotBlank()) tls.put("shortId", n.sid)
         if (n.spx.isNotBlank()) tls.put("spiderX", n.spx)
+        if (n.echConfigList.isNotBlank()) tls.put("echConfigList", n.echConfigList)
+        if (n.peerCertSha256.isNotBlank()) tls.put("pinnedPeerCertSha256", n.peerCertSha256)
+        if (n.verifyPeerCertByName.isNotBlank()) {
+            tls.put("verifyPeerCertByName", n.verifyPeerCertByName)
+        }
         return tls
     }
 }

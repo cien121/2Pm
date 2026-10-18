@@ -66,15 +66,19 @@ object NodeLinkParser {
         val security = q("security")?.lowercase().takeIf { it == "tls" || it == "reality" }.orEmpty()
         val insecure = listOf("insecure", "allowInsecure", "allow_insecure")
             .any { uri.getQueryParameter(it) == "1" }
+        val net = q("type")?.lowercase()?.ifEmpty { "tcp" } ?: "tcp"
+        // "mode" means XHTTP mode for xhttp, gRPC mode for grpc.
+        val mode = q("mode").orEmpty()
         return n.copy(
-            network = q("type")?.lowercase()?.ifEmpty { "tcp" } ?: "tcp",
+            network = net,
             headerType = q("headerType")?.ifEmpty { "none" } ?: "none",
             wsHost = q("host").orEmpty(),
             wsPath = q("path")?.ifEmpty { "/" } ?: "/",
             seed = q("seed").orEmpty(),
             serviceName = q("serviceName").orEmpty(),
             authority = q("authority").orEmpty(),
-            grpcMode = q("mode").orEmpty(),
+            grpcMode = if (net == "grpc") mode else "",
+            xhttpMode = if (net == "xhttp") mode else "",
             security = security,
             insecure = insecure,
             sni = q("sni").orEmpty(),
@@ -83,7 +87,9 @@ object NodeLinkParser {
             pbk = q("pbk").orEmpty(),
             sid = q("sid").orEmpty(),
             spx = q("spx").orEmpty(),
-            flow = q("flow").orEmpty()
+            flow = q("flow").orEmpty(),
+            echConfigList = q("ech").orEmpty(),
+            peerCertSha256 = q("peerCertSha256").orEmpty()
         )
     }
 
@@ -288,6 +294,8 @@ object NodeLinkParser {
             bandwidthDown = q("downmbps")?.let { "$it mbps" }.orEmpty(),
             obfsPassword = q("obfs-password").orEmpty(),
             portHopping = q("mport").orEmpty(),
+            hopInterval = q("hop-interval").orEmpty(),
+            echConfigList = q("ech").orEmpty(),
             coreType = CoreType.XRAY
         )
     }

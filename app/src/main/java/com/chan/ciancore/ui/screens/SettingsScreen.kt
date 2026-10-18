@@ -63,7 +63,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var geoStatus by remember { mutableStateOf<String?>(null) }
     var geoBusy by remember { mutableStateOf(false) }
-    val routeMode = remember { com.chan.ciancore.data.RoutePrefs.getMode(context) }
+    var geoProgress by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -106,7 +106,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                 )
                 SettingsRow(
                     title = "路由规则",
-                    value = routeMode.displayName,
+                    value = "${com.chan.ciancore.data.RoutePrefs.getRules(context).count { it.enabled }} 条启用中",
                     onClick = { onNavigate("routing") }
                 )
                 SettingsRow(
@@ -116,16 +116,26 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                 )
                 SettingsRow(
                     title = "Geo 资源",
-                    value = if (geoBusy) "更新中…" else (geoStatus ?: "已内置，点击更新"),
+                    value = if (geoBusy) (geoProgress ?: "更新中…") else (geoStatus ?: "已内置，点击更新"),
                     onClick = {
                         if (geoBusy) return@SettingsRow
                         geoBusy = true
                         geoStatus = null
+                        geoProgress = "准备下载…"
                         CoroutineScope(Dispatchers.Main).launch {
                             val err = withContext(Dispatchers.IO) {
-                                com.chan.ciancore.data.GeoManager.update(context)
+                                com.chan.ciancore.data.GeoManager.update(context) { label, done, total ->
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        geoProgress = if (total > 0) {
+                                            "$label ${(done * 100 / total).toInt()}%"
+                                        } else {
+                                            "$label ${done / 1024}KB"
+                                        }
+                                    }
+                                }
                             }
                             geoBusy = false
+                            geoProgress = null
                             geoStatus = err ?: "已更新到最新"
                         }
                     }

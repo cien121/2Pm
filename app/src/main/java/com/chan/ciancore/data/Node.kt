@@ -79,6 +79,20 @@ data class Node(
     val obfsPassword: String = "",
     /** Hysteria2 port hopping range (mport) */
     val portHopping: String = "",
+    /** Hysteria2 port hopping interval in seconds */
+    val hopInterval: String = "",
+    /** XHTTP mode, e.g. "stream-one" (vless/vmess/trojan) */
+    val xhttpMode: String = "",
+    /** XHTTP extra raw JSON (advanced) */
+    val xhttpExtra: String = "",
+    /** FinalMask raw JSON override (advanced); replaces structured builder output */
+    val finalMaskJson: String = "",
+    /** TLS ECH config list */
+    val echConfigList: String = "",
+    /** TLS pinned peer certificate SHA-256 */
+    val peerCertSha256: String = "",
+    /** TLS verify peer cert by name (SNI override for verification) */
+    val verifyPeerCertByName: String = "",
     /** TUIC congestion control */
     val congestionControl: String = "bbr",
     /** TUIC UDP relay mode */

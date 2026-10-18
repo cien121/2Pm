@@ -53,6 +53,7 @@ fun HomeScreen(
     val errorMsg by vm.connectionError.collectAsState()
     val notice by vm.notice.collectAsState()
     val egressIp by vm.egressIp.collectAsState()
+    val trafficSpeed by vm.trafficSpeed.collectAsState()
 
     val selectedNode = nodeList.firstOrNull { it.id == currentSelectedId }
 
@@ -111,8 +112,8 @@ fun HomeScreen(
             // HUD stats
             HudStats(
                 latencyMs = selectedNode?.latencyMs ?: -1,
-                downBps = 0,
-                upBps = 0,
+                downBps = trafficSpeed.downBps,
+                upBps = trafficSpeed.upBps,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
             Spacer(Modifier.height(28.dp))

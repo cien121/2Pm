@@ -20,7 +20,6 @@ import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.xray.XrayConfigBuilder
 import com.chan.ciancore.core.xray.XrayCore
 import com.chan.ciancore.data.ChainPrefs.chainNodeId
-import com.chan.ciancore.data.DnsPrefs.bypassLan
 import com.chan.ciancore.data.DnsPrefs.directDns
 import com.chan.ciancore.data.DnsPrefs.fakeDns
 import com.chan.ciancore.data.DnsPrefs.remoteDns
@@ -98,13 +97,11 @@ class CianCoreVpnService : VpnService() {
             val configJson = XrayConfigBuilder.build(
                 node,
                 XrayConfigBuilder.BuildOptions(
-                    routeMode = com.chan.ciancore.data.RoutePrefs.getMode(this).name,
-                    customRules = com.chan.ciancore.data.RoutePrefs.getCustomRules(this)
-                        .map { Triple(it.kind, it.value, it.action) },
+                    routingRules = com.chan.ciancore.data.RoutePrefs.getRules(this),
+                    domainStrategy = com.chan.ciancore.data.RoutePrefs.getDomainStrategy(this).value,
                     remoteDns = remoteDns,
                     directDns = directDns,
                     fakeDns = fakeDns,
-                    bypassLan = bypassLan,
                     chainNode = resolveChainNode(node.id)
                 )
             )

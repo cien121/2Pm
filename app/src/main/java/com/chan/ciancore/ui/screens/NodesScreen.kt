@@ -478,9 +478,9 @@ private fun EmptyNodesArt(modifier: Modifier = Modifier) {
 }
 
 /**
- * Manual node editor: fixes mis-parsed imports.
- * Edits the structured fields used to build the connection
- * (name, host, port, credentials). Protocol itself is fixed.
+ * Full manual node editor: fixes mis-parsed imports.
+ * Sectioned by protocol: basic, auth, transport, TLS, Reality,
+ * WS/XHTTP, gRPC, Hysteria2. Protocol itself is fixed.
  */
 @Composable
 private fun EditNodeDialog(
@@ -488,26 +488,47 @@ private fun EditNodeDialog(
     onDismiss: () -> Unit,
     onSave: (Node) -> Unit
 ) {
-    var name by remember(node.id) { mutableStateOf(node.name) }
-    var host by remember(node.id) { mutableStateOf(node.host) }
-    var port by remember(node.id) { mutableStateOf(node.port.toString()) }
-    var uuid by remember(node.id) { mutableStateOf(node.uuid) }
-    var password by remember(node.id) { mutableStateOf(node.password) }
-    var method by remember(node.id) { mutableStateOf(node.method) }
-    var error by remember(node.id) { mutableStateOf<String?>(null) }
-
     val proto = node.protocol.lowercase()
-    val uuidLabel = when (proto) {
-        "vless", "vmess" -> "用户 ID (UUID)"
-        "trojan" -> "密码"
-        "ss", "shadowsocks" -> "密码"
-        "hysteria2", "hy2" -> "认证密码"
-        "socks", "socks5" -> "用户名"
-        "tuic" -> "UUID"
-        else -> "账号"
-    }
-    val showPassword = proto == "tuic" || proto == "socks" || proto == "socks5"
-    val showMethod = proto == "ss" || proto == "shadowsocks"
+    val key = node.id
+
+    var name by remember(key) { mutableStateOf(node.name) }
+    var host by remember(key) { mutableStateOf(node.host) }
+    var port by remember(key) { mutableStateOf(node.port.toString()) }
+    var uuid by remember(key) { mutableStateOf(node.uuid) }
+    var password by remember(key) { mutableStateOf(node.password) }
+    var method by remember(key) { mutableStateOf(node.method) }
+    var flow by remember(key) { mutableStateOf(node.flow) }
+    var network by remember(key) { mutableStateOf(node.network.ifBlank { "tcp" }) }
+    var security by remember(key) { mutableStateOf(node.security) }
+    var sni by remember(key) { mutableStateOf(node.sni) }
+    var alpn by remember(key) { mutableStateOf(node.alpn) }
+    var fp by remember(key) { mutableStateOf(node.fp) }
+    var pbk by remember(key) { mutableStateOf(node.pbk) }
+    var sid by remember(key) { mutableStateOf(node.sid) }
+    var spx by remember(key) { mutableStateOf(node.spx) }
+    var insecure by remember(key) { mutableStateOf(node.insecure) }
+    var wsHost by remember(key) { mutableStateOf(node.wsHost) }
+    var wsPath by remember(key) { mutableStateOf(node.wsPath) }
+    var serviceName by remember(key) { mutableStateOf(node.serviceName) }
+    var authority by remember(key) { mutableStateOf(node.authority) }
+    var headerType by remember(key) { mutableStateOf(node.headerType.ifBlank { "none" }) }
+    var bandwidthUp by remember(key) { mutableStateOf(node.bandwidthUp) }
+    var bandwidthDown by remember(key) { mutableStateOf(node.bandwidthDown) }
+    var obfsPassword by remember(key) { mutableStateOf(node.obfsPassword) }
+    var portHopping by remember(key) { mutableStateOf(node.portHopping) }
+    var hopInterval by remember(key) { mutableStateOf(node.hopInterval) }
+    var xhttpMode by remember(key) { mutableStateOf(node.xhttpMode) }
+    var xhttpExtra by remember(key) { mutableStateOf(node.xhttpExtra) }
+    var finalMaskJson by remember(key) { mutableStateOf(node.finalMaskJson) }
+    var echConfigList by remember(key) { mutableStateOf(node.echConfigList) }
+    var peerCertSha256 by remember(key) { mutableStateOf(node.peerCertSha256) }
+    var verifyPeerCertByName by remember(key) { mutableStateOf(node.verifyPeerCertByName) }
+    var error by remember(key) { mutableStateOf<String?>(null) }
+
+    val isHy2 = proto == "hysteria2" || proto == "hy2"
+    val isStream = proto == "vless" || proto == "vmess" || proto == "trojan"
+    val showTls = security == "tls" || proto == "trojan" || isHy2
+    val showReality = security == "reality"
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -515,42 +536,138 @@ private fun EditNodeDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it; error = null },
-                    label = { Text("备注名") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                EditSection("基础")
+                EditField("备注名", name, onChange = { name = it; error = null })
+                EditField("服务器地址", host, onChange = { host = it; error = null })
+                EditField(
+                    "端口", port,
+                    onChange = { port = it.filter { c -> c.isDigit() }; error = null }
                 )
-                OutlinedTextField(
-                    value = host, onValueChange = { host = it; error = null },
-                    label = { Text("服务器地址") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = port, onValueChange = { port = it.filter { c -> c.isDigit() }; error = null },
-                    label = { Text("端口") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = uuid, onValueChange = { uuid = it; error = null },
-                    label = { Text(uuidLabel) }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (showPassword) {
-                    OutlinedTextField(
-                        value = password, onValueChange = { password = it; error = null },
-                        label = { Text("密码") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+
+                EditSection("认证")
+                when (proto) {
+                    "vless", "vmess" -> {
+                        EditField("用户 ID (UUID)", uuid, onChange = { uuid = it; error = null })
+                        EditField(
+                            if (proto == "vless") "加密方式（一般 none）" else "加密方式",
+                            method, onChange = { method = it }
+                        )
+                    }
+                    "trojan" -> EditField("密码", uuid, onChange = { uuid = it; error = null })
+                    "ss", "shadowsocks" -> {
+                        EditField("密码", uuid, onChange = { uuid = it; error = null })
+                        EditField("加密方式", method, onChange = { method = it })
+                    }
+                    "socks", "socks5" -> {
+                        EditField("用户名（可空）", uuid, onChange = { uuid = it })
+                        EditField("密码（可空）", password, onChange = { password = it })
+                    }
+                    "tuic" -> {
+                        EditField("UUID", uuid, onChange = { uuid = it; error = null })
+                        EditField("密码", password, onChange = { password = it })
+                    }
+                    else -> EditField("认证密码", uuid, onChange = { uuid = it; error = null })
                 }
-                if (showMethod) {
-                    OutlinedTextField(
-                        value = method, onValueChange = { method = it; error = null },
-                        label = { Text("加密方式") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+
+                if (isStream) {
+                    EditSection("传输设置")
+                    EditChips(
+                        "传输协议",
+                        listOf("tcp", "ws", "xhttp", "grpc", "httpupgrade", "kcp", "h2"),
+                        network, onSelect = { network = it }
                     )
+                    EditChips(
+                        "传输安全",
+                        listOf("" to "无", "tls" to "TLS", "reality" to "Reality"),
+                        security, onSelect = { security = it }
+                    )
+                    if (network == "tcp" || network == "kcp") {
+                        EditChips("伪装头", listOf("none", "http"), headerType,
+                            onSelect = { headerType = it })
+                    }
+                    if (network == "ws" || network == "xhttp" || network == "httpupgrade" || network == "h2") {
+                        EditField("路径", wsPath, onChange = { wsPath = it })
+                        EditField("Host（可空）", wsHost, onChange = { wsHost = it })
+                    }
+                    if (network == "xhttp") {
+                        EditChips(
+                            "XHTTP 模式",
+                            listOf("auto", "packet-up", "stream-up", "stream-one"),
+                            xhttpMode, onSelect = { xhttpMode = it }
+                        )
+                        EditField("XHTTP Extra 原始 JSON（可空）", xhttpExtra,
+                            onChange = { xhttpExtra = it })
+                    }
+                    if (network == "grpc") {
+                        EditField("服务名", serviceName, onChange = { serviceName = it })
+                        EditField("Authority（可空）", authority, onChange = { authority = it })
+                    }
                 }
+
+                if (showTls) {
+                    EditSection("TLS 设置")
+                    EditField("SNI / 服务器名", sni, onChange = { sni = it })
+                    EditField("ALPN（逗号分隔，可空）", alpn, onChange = { alpn = it })
+                    EditChips(
+                        "uTLS 指纹",
+                        listOf("", "chrome", "firefox", "safari", "ios", "android", "edge", "random"),
+                        fp, onSelect = { fp = it }
+                    )
+                    EditField("ECH 配置（可空）", echConfigList,
+                        onChange = { echConfigList = it })
+                    EditField("证书指纹 SHA-256（可空）", peerCertSha256,
+                        onChange = { peerCertSha256 = it })
+                    EditField("按名称验证证书（可空）", verifyPeerCertByName,
+                        onChange = { verifyPeerCertByName = it })
+                    if (proto == "vless" || proto == "trojan") {
+                        EditField("流控（可空，如 xtls-rprx-vision）", flow, onChange = { flow = it })
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("允许不安全证书", fontSize = 14.sp, color = InkPrimary,
+                            modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = insecure, onCheckedChange = { insecure = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = AuroraCyan)
+                        )
+                    }
+                }
+
+                if (showReality) {
+                    EditSection("Reality 设置")
+                    EditField("公钥", pbk, onChange = { pbk = it })
+                    EditField("ShortId", sid, onChange = { sid = it })
+                    EditField("SpiderX（可空）", spx, onChange = { spx = it })
+                    if (proto == "vless" || proto == "trojan") {
+                        EditField("流控（可空，如 xtls-rprx-vision）", flow, onChange = { flow = it })
+                    }
+                }
+
+                if (isHy2) {
+                    EditSection("Hysteria2 设置")
+                    EditField("上传带宽（可空，如 50 mbps）", bandwidthUp,
+                        onChange = { bandwidthUp = it })
+                    EditField("下载带宽（可空，如 100 mbps）", bandwidthDown,
+                        onChange = { bandwidthDown = it })
+                    EditField("混淆密码（可空）", obfsPassword, onChange = { obfsPassword = it })
+                    EditField("端口跳跃（可空，如 20000-30000）", portHopping,
+                        onChange = { portHopping = it })
+                    EditField("端口跳跃间隔（秒，可空）", hopInterval,
+                        onChange = { hopInterval = it.filter { c -> c.isDigit() } })
+                    EditField("FinalMask 原始 JSON（可空，高级）", finalMaskJson,
+                        onChange = { finalMaskJson = it })
+                }
+
+                if (isStream) {
+                    EditSection("高级")
+                    EditField("FinalMask 原始 JSON（可空）", finalMaskJson,
+                        onChange = { finalMaskJson = it })
+                }
+
                 error?.let {
                     Text(text = it, fontSize = 12.sp, color = SignalError)
                 }
@@ -563,15 +680,26 @@ private fun EditNodeDialog(
                     name.isBlank() -> error = "备注名不能为空"
                     host.isBlank() -> error = "服务器地址不能为空"
                     p == null || p !in 1..65535 -> error = "端口无效（1-65535）"
-                    uuid.isBlank() && proto != "socks" && proto != "socks5" -> error = "$uuidLabel 不能为空"
+                    uuid.isBlank() && proto != "socks" && proto != "socks5" ->
+                        error = "认证信息不能为空"
+                    showReality && pbk.isBlank() -> error = "Reality 公钥不能为空"
                     else -> onSave(
                         node.copy(
-                            name = name.trim(),
-                            host = host.trim(),
-                            port = p!!,
-                            uuid = uuid,
-                            password = password,
-                            method = method
+                            name = name.trim(), host = host.trim(), port = p,
+                            uuid = uuid, password = password, method = method,
+                            flow = flow, network = network, security = security,
+                            sni = sni, alpn = alpn, fp = fp, pbk = pbk, sid = sid,
+                            spx = spx, insecure = insecure, wsHost = wsHost,
+                            wsPath = wsPath.ifBlank { "/" }, serviceName = serviceName,
+                            authority = authority, headerType = headerType,
+                            bandwidthUp = bandwidthUp, bandwidthDown = bandwidthDown,
+                            obfsPassword = obfsPassword, portHopping = portHopping,
+                            hopInterval = hopInterval,
+                            xhttpMode = xhttpMode, xhttpExtra = xhttpExtra,
+                            finalMaskJson = finalMaskJson,
+                            echConfigList = echConfigList,
+                            peerCertSha256 = peerCertSha256,
+                            verifyPeerCertByName = verifyPeerCertByName
                         )
                     )
                 }
@@ -582,4 +710,86 @@ private fun EditNodeDialog(
         },
         containerColor = NightSurface
     )
+}
+
+@Composable
+private fun EditSection(title: String) {
+    Text(
+        text = title,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        color = AuroraCyan,
+        modifier = Modifier.padding(top = 6.dp)
+    )
+}
+
+@Composable
+private fun EditField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label, fontSize = 12.sp) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun EditChips(
+    label: String,
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit
+) = EditChips(label, options.map { it to it }, selected, onSelect)
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun EditChips(
+    label: String,
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val all = remember(options, selected) {
+        if (options.any { it.first == selected }) options
+        else options + (selected to selected.ifBlank { "自定义" })
+    }
+    Column {
+        Text(text = label, fontSize = 12.sp, color = InkSecondary)
+        Spacer(Modifier.height(4.dp))
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            all.forEach { (value, text) ->
+                val isSel = value == selected
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (isSel) AuroraCyan.copy(alpha = 0.2f)
+                            else NightOutline.copy(alpha = 0.4f)
+                        )
+                        .border(
+                            1.dp,
+                            if (isSel) AuroraCyan else NightOutline,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .combinedClickable(onClick = { onSelect(value) })
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = text.ifBlank { "无" },
+                        fontSize = 12.sp,
+                        color = if (isSel) AuroraCyan else InkSecondary,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+    }
 }
