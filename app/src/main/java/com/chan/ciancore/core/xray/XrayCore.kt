@@ -2,6 +2,7 @@ package com.chan.ciancore.core.xray
 
 import android.content.Context
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.ProxyCore
@@ -13,6 +14,7 @@ import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.Libv2ray
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Xray-core adapter over the official `libv2ray.aar`
@@ -62,7 +64,22 @@ class XrayCore(private val appContext: Context) : ProxyCore {
             val deviceId = Settings.Secure.getString(
                 context.contentResolver, Settings.Secure.ANDROID_ID
             ).orEmpty()
-            Libv2ray.initCoreEnv(assetDir.absolutePath, deviceId)
+            // The AAR's initCoreEnv sets xray.xudp.basekey from this key.
+            // Xray requires it to be base64url-encoded 32 bytes, so derive a
+            // stable per-device key: base64url(SHA-256(ANDROID_ID)).
+            // Passing the raw ANDROID_ID breaks core init
+            // ("BaseKey must be 32 bytes").
+            val xudpKey = try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                    .digest(deviceId.toByteArray(Charsets.UTF_8))
+                Base64.encodeToString(
+                    digest,
+                    Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+                )
+            } catch (_: Throwable) {
+                ""
+            }
+            Libv2ray.initCoreEnv(assetDir.absolutePath, xudpKey)
             initialized = true
         }
     }

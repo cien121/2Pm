@@ -127,7 +127,7 @@ fun CianCoreNavGraph(
             composable(Dest.Home.route) { HomeScreen(vm, requestVpnPermission) }
             composable(Dest.Nodes.route) { NodesScreen(vm) }
             composable(Dest.Settings.route) { SettingsScreen(onNavigate = { nav.navigate(it) }) }
-            composable("apps") { AppsScreen() }
+            composable("apps") { AppsScreen(onBack = { nav.popBackStack() }) }
             composable("routing") { RoutingScreen(vm) }
             composable("dns") { DnsScreen() }
         }

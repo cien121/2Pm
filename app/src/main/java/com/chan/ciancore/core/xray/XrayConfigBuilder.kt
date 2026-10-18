@@ -359,10 +359,12 @@ object XrayConfigBuilder {
     }
 
     private fun hysteria2Outbound(n: Node): JSONObject {
-        val server = JSONObject()
+        // Xray's hysteria outbound settings are FLAT (HysteriaClientConfig):
+        // {"version": 2, "address": ..., "port": ...} — NOT servers[].
+        val settings = JSONObject()
+            .put("version", 2)
             .put("address", n.host)
             .put("port", n.port)
-            .put("version", 2)
         val stream = JSONObject()
             .put("network", "hysteria")
             .put("security", "tls")
@@ -405,7 +407,7 @@ object XrayConfigBuilder {
         return JSONObject()
             .put("tag", "proxy")
             .put("protocol", "hysteria")
-            .put("settings", JSONObject().put("servers", JSONArray().put(server)))
+            .put("settings", settings)
             .put("streamSettings", stream)
     }
 
