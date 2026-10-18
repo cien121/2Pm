@@ -475,6 +475,33 @@ private fun RuleEditDialog(
     )
 }
 
+@Composable
+private fun ChipOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) AuroraCyan.copy(alpha = 0.2f) else Color.Transparent)
+            .border(
+                1.dp,
+                if (selected) AuroraCyan else NightOutline,
+                RoundedCornerShape(10.dp)
+            )
+            .combinedClickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = if (selected) AuroraCyan else InkSecondary,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
 
 
 

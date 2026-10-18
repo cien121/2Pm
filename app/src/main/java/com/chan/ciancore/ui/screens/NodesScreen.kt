@@ -39,7 +39,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -375,7 +374,7 @@ private fun NodeTile(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddNodeDialog(
     onDismiss: () -> Unit,
@@ -840,6 +839,7 @@ private fun EditSection(title: String) {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChainNodePickerDialog(
     nodes: List<Node>,
@@ -874,9 +874,7 @@ private fun ChainNodePickerDialog(
                             RoundedCornerShape(10.dp)
                         )
                         .combinedClickable(onClick = {
-                            com.chan.ciancore.data.ChainPrefs.run {
-                                context.chainNodeId = -1L
-                            }
+                            context.chainNodeId = -1L
                             onPick(null)
                         })
                         .padding(horizontal = 14.dp, vertical = 10.dp)
