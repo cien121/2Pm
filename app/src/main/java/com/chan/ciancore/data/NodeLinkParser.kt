@@ -31,6 +31,7 @@ object NodeLinkParser {
             "hysteria2", "hy2" -> parseHysteria2(link)
             "tuic" -> parseTuic(link)
             "socks", "socks5" -> parseSocks(link)
+            "http" -> parseHttp(link)
             else -> throw IllegalArgumentException("不支持的协议：$scheme")
         }
     }
@@ -321,6 +322,25 @@ object NodeLinkParser {
             name = nodeName(uri, "${uri.host}:${uri.port}"),
             rawLink = link,
             protocol = "socks",
+            host = uri.host!!,
+            port = uri.port,
+            uuid = user,
+            password = pass,
+            network = "tcp",
+            coreType = CoreType.XRAY
+        )
+    }
+
+    private fun parseHttp(link: String): Node {
+        val uri = Uri.parse(link)
+        val userInfo = decode(uri.encodedUserInfo.orEmpty())
+        val user = userInfo.substringBefore(":").trim()
+        val pass = if (":" in userInfo) userInfo.substringAfter(":") else ""
+        checkHostPort(uri.host, uri.port, "http")
+        return Node(
+            name = nodeName(uri, "${uri.host}:${uri.port}"),
+            rawLink = link,
+            protocol = "http",
             host = uri.host!!,
             port = uri.port,
             uuid = user,

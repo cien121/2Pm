@@ -1,5 +1,9 @@
 package com.chan.ciancore.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
@@ -28,6 +32,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -101,19 +107,46 @@ fun NodesScreen(vm: MainViewModel) {
                 )
                 if (nodeList.isNotEmpty()) {
                     val testing = testingIds.isNotEmpty()
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, AuroraCyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                            .combinedClickable(onClick = { vm.testAllNodes() })
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = if (testing) "测速中…" else "⚡ 全部测速",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AuroraCyan
-                        )
+                    val ctx = LocalContext.current
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Export all to clipboard
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, AuroraCyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                .combinedClickable(onClick = {
+                                    val text = NodeLinkGenerator.exportAll(nodeList)
+                                    if (text.isNotBlank()) {
+                                        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        cm.setPrimaryClip(ClipData.newPlainText("nodes", text))
+                                        Toast.makeText(ctx, "已复制 ${text.lines().size} 个节点链接", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(ctx, "没有可导出的节点", Toast.LENGTH_SHORT).show()
+                                    }
+                                })
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "📋 导出",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AuroraCyan
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, AuroraCyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                .combinedClickable(onClick = { vm.testAllNodes() })
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = if (testing) "测速中…" else "⚡ 全部测速",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AuroraCyan
+                            )
+                        }
                     }
                 }
             }
@@ -171,7 +204,12 @@ fun NodesScreen(vm: MainViewModel) {
                 }
             },
             onAddBatch = { text, onResult -> vm.addNodesFromText(text, onResult) },
-            onAddSubscription = { url, onResult -> vm.addNodesFromSubscription(url, onResult) }
+            onAddSubscription = { url, onResult -> vm.addNodesFromSubscription(url, onResult) },
+            onCreateManual = { protocol ->
+                vm.createManualNode(protocol) { node ->
+                    editingNode = node
+                }
+            }
         )
     }
 
@@ -323,14 +361,26 @@ private fun AddNodeDialog(
     onDismiss: () -> Unit,
     onAdd: (String, (String?) -> Unit) -> Unit,
     onAddBatch: (String, (SubscriptionManager.ImportResult) -> Unit) -> Unit,
-    onAddSubscription: (String, (Result<SubscriptionManager.ImportResult>) -> Unit) -> Unit
+    onAddSubscription: (String, (Result<SubscriptionManager.ImportResult>) -> Unit) -> Unit,
+    onCreateManual: (String) -> Unit
 ) {
     var tab by remember { mutableStateOf(0) }
     var link by remember { mutableStateOf("") }
     var subUrl by remember { mutableStateOf("") }
+    var manualProtocol by remember { mutableStateOf("vless") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var doneMsg by remember { mutableStateOf<String?>(null) }
+
+    val protocols = listOf(
+        "vless" to "VLESS",
+        "vmess" to "VMess",
+        "trojan" to "Trojan",
+        "ss" to "Shadowsocks",
+        "socks" to "SOCKS",
+        "http" to "HTTP",
+        "hysteria2" to "Hysteria2"
+    )
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
@@ -341,7 +391,7 @@ private fun AddNodeDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("链接", "订阅").forEachIndexed { i, label ->
+                    listOf("链接", "手动", "订阅").forEachIndexed { i, label ->
                         val selected = tab == i
                         Box(
                             modifier = Modifier
@@ -385,6 +435,43 @@ private fun AddNodeDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         minLines = 4
                     )
+                } else if (tab == 1) {
+                    Text(
+                        text = "选择协议，创建空白节点手动填写",
+                        fontSize = 12.sp,
+                        color = InkSecondary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        protocols.forEach { (value, label) ->
+                            val selected = manualProtocol == value
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (selected) AuroraCyan.copy(alpha = 0.2f)
+                                        else Color.Transparent
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (selected) AuroraCyan else NightOutline,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .combinedClickable(onClick = { manualProtocol = value })
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 13.sp,
+                                    color = if (selected) AuroraCyan else InkSecondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 } else {
                     Text(
                         text = "输入订阅链接，自动拉取全部节点",
@@ -415,6 +502,12 @@ private fun AddNodeDialog(
             TextButton(
                 enabled = !busy,
                 onClick = {
+                    if (tab == 1) {
+                        // Manual: create blank node with selected protocol
+                        onCreateManual(manualProtocol)
+                        onDismiss()
+                        return@TextButton
+                    }
                     busy = true
                     error = null
                     doneMsg = null
@@ -451,7 +544,7 @@ private fun AddNodeDialog(
                         }
                     }
                 }
-            ) { Text(if (tab == 1) "拉取" else "添加", color = AuroraCyan) }
+            ) { Text(if (tab == 2) "拉取" else "添加", color = AuroraCyan) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }

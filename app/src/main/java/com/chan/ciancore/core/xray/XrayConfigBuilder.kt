@@ -31,7 +31,18 @@ object XrayConfigBuilder {
          * the main outbound dials through this node's outbound
          * (Xray `proxySettings.tag = "front"`).
          */
-        val chainNode: Node? = null
+        val chainNode: Node? = null,
+        // Mux (multiplexing)
+        val muxEnabled: Boolean = false,
+        val muxConcurrency: Int = 8,
+        // Fragment (TLS hello fragmentation for DPI evasion)
+        val fragmentEnabled: Boolean = false,
+        val fragmentPackets: String = "tlshello",
+        val fragmentLength: String = "50-100",
+        val fragmentInterval: String = "10-20",
+        // Local DNS: route port 53 to Xray's DNS module (split horizon).
+        // Requires loop-protection for the DNS servers themselves.
+        val localDnsEnabled: Boolean = false
     )
 
     /** Full runnable config for [node], including TUN plumbing. */
@@ -95,18 +106,28 @@ object XrayConfigBuilder {
     }
 
     /** The single "proxy" outbound for [node]. */
-    fun buildOutbound(node: Node, tag: String = "proxy"): JSONObject {
+    fun buildOutbound(node: Node, tag: String = "proxy", opts: BuildOptions = BuildOptions()): JSONObject {
         val ob = when (node.protocol.lowercase()) {
-            "vless" -> vlessOutbound(node)
-            "vmess" -> vmessOutbound(node)
-            "trojan" -> trojanOutbound(node)
-            "ss", "shadowsocks" -> shadowsocksOutbound(node)
-            "socks", "socks5" -> socksOutbound(node)
-            "hysteria2", "hy2" -> hysteria2Outbound(node)
+            "vless" -> vlessOutbound(node, opts)
+            "vmess" -> vmessOutbound(node, opts)
+            "trojan" -> trojanOutbound(node, opts)
+            "ss", "shadowsocks" -> shadowsocksOutbound(node, opts)
+            "socks", "socks5" -> socksOutbound(node, opts)
+            "http" -> httpOutbound(node, opts)
+            "hysteria2", "hy2" -> hysteria2Outbound(node, opts)
             "tuic" -> throw IllegalArgumentException("tuic 协议需要 sing-box 核心，当前版本暂不支持")
             else -> throw IllegalArgumentException("Xray 核心不支持协议：${node.protocol}")
         }
         ob.put("tag", tag)
+        // Mux (multiplexing): reuse one connection for multiple streams.
+        // Skip for hysteria2 (QUIC-based, mux not applicable).
+        if (opts.muxEnabled && !node.protocol.lowercase().startsWith("hy")) {
+            ob.put(
+                "mux", JSONObject()
+                    .put("enabled", true)
+                    .put("concurrency", opts.muxConcurrency)
+            )
+        }
         return ob
     }
 
@@ -186,6 +207,32 @@ object XrayConfigBuilder {
      */
     private fun routingObject(options: BuildOptions): JSONObject {
         val rules = JSONArray()
+        // Local DNS: when enabled, DNS queries go to Xray's DNS module
+        // (split horizon) instead of straight through the tunnel.
+        // Loop protection: the DNS servers themselves must NOT match the
+        // port-53 rule, or Xray's upstream queries would loop forever.
+        if (options.localDnsEnabled) {
+            val dnsServers = listOfNotNull(
+                options.remoteDns.ifBlank { null }?.split(",")?.map { it.trim() },
+                options.directDns.ifBlank { null }?.split(",")?.map { it.trim() },
+                listOf("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "223.5.5.5", "223.6.6.6")
+            ).flatten().distinct().filter { it.isNotBlank() }
+            if (dnsServers.isNotEmpty()) {
+                rules.put(
+                    JSONObject()
+                        .put("type", "field")
+                        .put("ip", JSONArray(dnsServers))
+                        .put("outboundTag", "proxy")
+                )
+            }
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("port", 53)
+                    .put("network", "udp")
+                    .put("outboundTag", "dns")
+            )
+        }
         // User rules.
         for (rule in options.routingRules) {
             if (!rule.enabled) continue
@@ -245,7 +292,7 @@ object XrayConfigBuilder {
 
     // ── per-protocol outbounds ──────────────────────────────────
 
-    private fun vlessOutbound(n: Node): JSONObject {
+    private fun vlessOutbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         val user = JSONObject()
             .put("id", n.uuid)
             .put("encryption", n.method.ifEmpty { "none" })
@@ -262,11 +309,11 @@ object XrayConfigBuilder {
             .put("tag", "proxy")
             .put("protocol", "vless")
             .put("settings", JSONObject().put("vnext", JSONArray().put(vnext)))
-            .put("streamSettings", streamSettings(n))
+            .put("streamSettings", streamSettings(n, opts))
             .put("mux", JSONObject().put("enabled", false))
     }
 
-    private fun vmessOutbound(n: Node): JSONObject {
+    private fun vmessOutbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         val user = JSONObject()
             .put("id", n.uuid)
             .put("alterId", 0)
@@ -280,11 +327,11 @@ object XrayConfigBuilder {
             .put("tag", "proxy")
             .put("protocol", "vmess")
             .put("settings", JSONObject().put("vnext", JSONArray().put(vnext)))
-            .put("streamSettings", streamSettings(n))
+            .put("streamSettings", streamSettings(n, opts))
             .put("mux", JSONObject().put("enabled", false))
     }
 
-    private fun trojanOutbound(n: Node): JSONObject {
+    private fun trojanOutbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         val server = JSONObject()
             .put("address", n.host)
             .put("port", n.port)
@@ -297,10 +344,10 @@ object XrayConfigBuilder {
             .put("tag", "proxy")
             .put("protocol", "trojan")
             .put("settings", JSONObject().put("servers", JSONArray().put(server)))
-            .put("streamSettings", streamSettings(n))
+            .put("streamSettings", streamSettings(n, opts))
     }
 
-    private fun shadowsocksOutbound(n: Node): JSONObject {
+    private fun shadowsocksOutbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         val server = JSONObject()
             .put("address", n.host)
             .put("port", n.port)
@@ -311,10 +358,10 @@ object XrayConfigBuilder {
             .put("tag", "proxy")
             .put("protocol", "shadowsocks")
             .put("settings", JSONObject().put("servers", JSONArray().put(server)))
-            .put("streamSettings", streamSettings(n))
+            .put("streamSettings", streamSettings(n, opts))
     }
 
-    private fun socksOutbound(n: Node): JSONObject {
+    private fun socksOutbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         val server = JSONObject()
             .put("address", n.host)
             .put("port", n.port)
@@ -333,7 +380,27 @@ object XrayConfigBuilder {
             .put("settings", JSONObject().put("servers", JSONArray().put(server)))
     }
 
-    private fun hysteria2Outbound(n: Node): JSONObject {
+    private fun httpOutbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
+        val server = JSONObject()
+            .put("address", n.host)
+            .put("port", n.port)
+        if (n.uuid.isNotBlank()) {
+            server.put(
+                "users", JSONArray().put(
+                    JSONObject()
+                        .put("user", n.uuid)
+                        .put("pass", n.password)
+                )
+            )
+        }
+        return JSONObject()
+            .put("tag", "proxy")
+            .put("protocol", "http")
+            .put("settings", JSONObject().put("servers", JSONArray().put(server)))
+            .put("streamSettings", streamSettings(n, opts))
+    }
+
+    private fun hysteria2Outbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         // Xray's hysteria outbound settings are FLAT (HysteriaClientConfig):
         // {"version": 2, "address": ..., "port": ...} — NOT servers[].
         val settings = JSONObject()
@@ -410,7 +477,7 @@ object XrayConfigBuilder {
 
     // ── stream settings ─────────────────────────────────────────
 
-    private fun streamSettings(n: Node): JSONObject {
+    private fun streamSettings(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
         val ss = JSONObject()
         val network = n.network.ifEmpty { "tcp" }
         ss.put("network", network)
@@ -488,6 +555,22 @@ object XrayConfigBuilder {
         // Raw FinalMask JSON (advanced override).
         n.finalMaskJson.trim().takeIf { it.isNotBlank() }?.let { raw ->
             runCatching { ss.put("finalmask", JSONObject(raw)) }
+        }
+        // Fragment: split TLS handshakes to evade DPI/SNI detection.
+        // Only applies to TCP-based transports with TLS.
+        if (opts.fragmentEnabled && (n.security == "tls" || n.security == "reality")) {
+            val network = n.network.ifEmpty { "tcp" }
+            if (network == "tcp" || network == "ws" || network == "httpupgrade" || network == "xhttp") {
+                ss.put(
+                    "sockopt", JSONObject()
+                        .put(
+                            "fragment", JSONObject()
+                                .put("packets", opts.fragmentPackets.ifBlank { "tlshello" })
+                                .put("length", opts.fragmentLength.ifBlank { "50-100" })
+                                .put("interval", opts.fragmentInterval.ifBlank { "10-20" })
+                        )
+                )
+            }
         }
         return ss
     }

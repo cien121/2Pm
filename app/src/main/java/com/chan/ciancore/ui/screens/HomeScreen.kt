@@ -123,13 +123,28 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "信号源",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = InkSecondary,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "信号源",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = InkSecondary
+                    )
+                    TextButton(onClick = { vm.autoSelectFastest() }) {
+                        Text(
+                            text = "⚡ 自动选择",
+                            fontSize = 12.sp,
+                            color = AuroraCyan,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
                 NodeDeck(
                     nodes = nodeList,
                     selectedId = currentSelectedId,

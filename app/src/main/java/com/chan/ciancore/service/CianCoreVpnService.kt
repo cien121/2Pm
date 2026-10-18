@@ -102,7 +102,14 @@ class CianCoreVpnService : VpnService() {
                     remoteDns = remoteDns,
                     directDns = directDns,
                     fakeDns = fakeDns,
-                    chainNode = resolveChainNode(node.id)
+                    chainNode = resolveChainNode(node.id),
+                    muxEnabled = com.chan.ciancore.data.StreamPrefs.isMuxEnabled(this),
+                    muxConcurrency = com.chan.ciancore.data.StreamPrefs.getMuxConcurrency(this),
+                    fragmentEnabled = com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(this),
+                    fragmentPackets = com.chan.ciancore.data.StreamPrefs.getFragmentPackets(this),
+                    fragmentLength = com.chan.ciancore.data.StreamPrefs.getFragmentLength(this),
+                    fragmentInterval = com.chan.ciancore.data.StreamPrefs.getFragmentInterval(this),
+                    localDnsEnabled = com.chan.ciancore.data.StreamPrefs.isLocalDnsEnabled(this)
                 )
             )
 

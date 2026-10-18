@@ -64,6 +64,10 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     var geoStatus by remember { mutableStateOf<String?>(null) }
     var geoBusy by remember { mutableStateOf(false) }
     var geoProgress by remember { mutableStateOf<String?>(null) }
+    // Stream tuning (Mux / Fragment / Local DNS)
+    var muxEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isMuxEnabled(context)) }
+    var fragmentEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(context)) }
+    var localDnsEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isLocalDnsEnabled(context)) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -95,6 +99,36 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     subtitle = "设备启动后自动建立隧道",
                     checked = autoConnect,
                     onCheckedChange = { autoConnect = it }
+                )
+            }
+
+            SettingsGroup(title = "传输优化") {
+                SettingsToggle(
+                    title = "Mux 多路复用",
+                    subtitle = "单连接复用多路流，降低延迟（默认并发 8）",
+                    checked = muxEnabled,
+                    onCheckedChange = {
+                        muxEnabled = it
+                        com.chan.ciancore.data.StreamPrefs.setMuxEnabled(context, it)
+                    }
+                )
+                SettingsToggle(
+                    title = "分片 (Fragment)",
+                    subtitle = "切分 TLS 握手，规避 SNI 探测",
+                    checked = fragmentEnabled,
+                    onCheckedChange = {
+                        fragmentEnabled = it
+                        com.chan.ciancore.data.StreamPrefs.setFragmentEnabled(context, it)
+                    }
+                )
+                SettingsToggle(
+                    title = "本地 DNS",
+                    subtitle = "DNS 由核心模块处理，国内域名直连解析",
+                    checked = localDnsEnabled,
+                    onCheckedChange = {
+                        localDnsEnabled = it
+                        com.chan.ciancore.data.StreamPrefs.setLocalDnsEnabled(context, it)
+                    }
                 )
             }
 

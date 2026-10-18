@@ -224,6 +224,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Create a blank node for manual editing. Returns the inserted node. */
+    fun createManualNode(protocol: String, onDone: (Node) -> Unit) {
+        viewModelScope.launch {
+            val node = Node(
+                name = "新节点",
+                rawLink = "",
+                protocol = protocol,
+                network = "tcp"
+            )
+            val id = withContext(Dispatchers.IO) { dao.insert(node) }
+            onDone(node.copy(id = id))
+        }
+    }
+
     /** Test all nodes with the configured concurrency. */
     fun testAllNodes() {
         viewModelScope.launch {
@@ -243,6 +257,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 _testingIds.value = emptySet()
             }
+        }
+    }
+
+    /** Test all nodes, then auto-select the fastest reachable one. */
+    fun autoSelectFastest(onDone: (Node?) -> Unit = {}) {
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val list = withContext(Dispatchers.IO) { dao.getAll() }
+            if (list.isEmpty()) {
+                onDone(null)
+                return@launch
+            }
+            val pending = list.filter { !_testingIds.value.contains(it.id) }
+            _testingIds.value = _testingIds.value + pending.map { it.id }
+            try {
+                LatencyTester.testAll(
+                    ctx,
+                    pending,
+                    ctx.concurrentTests
+                ) { node, ms ->
+                    withContext(Dispatchers.IO) { dao.updateLatency(node.id, ms) }
+                    _testingIds.value = _testingIds.value - node.id
+                }
+            } finally {
+                _testingIds.value = emptySet()
+            }
+            // Pick the fastest node with a valid measurement.
+            val fastest = withContext(Dispatchers.IO) { dao.getAll() }
+                .filter { it.latencyMs >= 0 }
+                .minByOrNull { it.latencyMs }
+            if (fastest != null) selectNode(fastest)
+            onDone(fastest)
         }
     }
 
