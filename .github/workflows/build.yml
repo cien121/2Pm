@@ -21,9 +21,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # Action default packages ("tools platform-tools") fail:
-          # the obsolete "tools" package no longer exists in the repo.
-          packages: platform-tools "platforms;android-34" "build-tools;34.0.0"
+          # NOTE: quote the whole list with single quotes — double quotes
+          # inside the value get passed literally to sdkmanager and it
+          # fails to find packages like '"platforms;android-34"'.
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
       - name: Set up Go
         uses: actions/setup-go@v5
