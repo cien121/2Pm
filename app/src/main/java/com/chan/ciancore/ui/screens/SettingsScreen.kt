@@ -67,7 +67,6 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     // Stream tuning (Mux / Fragment / Local DNS)
     var muxEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isMuxEnabled(context)) }
     var fragmentEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(context)) }
-    var localDnsEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isLocalDnsEnabled(context)) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -119,15 +118,6 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     onCheckedChange = {
                         fragmentEnabled = it
                         com.chan.ciancore.data.StreamPrefs.setFragmentEnabled(context, it)
-                    }
-                )
-                SettingsToggle(
-                    title = "本地 DNS",
-                    subtitle = "DNS 由核心模块处理，国内域名直连解析",
-                    checked = localDnsEnabled,
-                    onCheckedChange = {
-                        localDnsEnabled = it
-                        com.chan.ciancore.data.StreamPrefs.setLocalDnsEnabled(context, it)
                     }
                 )
             }

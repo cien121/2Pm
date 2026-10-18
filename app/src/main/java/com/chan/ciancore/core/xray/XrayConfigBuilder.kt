@@ -75,6 +75,16 @@ object XrayConfigBuilder {
             }
         }
         outbounds.put(directOutbound()).put(blockOutbound())
+        // Local DNS: define the "dns" outbound so the port-53 routing rule
+        // has a valid target. Xray's "dns" outbound type forwards queries
+        // to the core DNS module.
+        if (options.localDnsEnabled) {
+            outbounds.put(
+                JSONObject()
+                    .put("tag", "dns")
+                    .put("protocol", "dns")
+            )
+        }
         config.put("outbounds", outbounds)
         config.put("routing", routingObject(options))
         config.put("dns", dnsObject(options))
