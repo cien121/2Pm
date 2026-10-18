@@ -4,114 +4,39 @@ import android.content.Context
 import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.ProxyCore
 import com.chan.ciancore.core.TrafficStats
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import libbox.CommandServer
-import libbox.CommandServerHandler
-import libbox.Libbox
-import libbox.PlatformInterface
-import libbox.SetupOptions
 
 /**
- * sing-box adapter over the official `libbox.aar`
- * (built from SagerNet/sing-box `experimental/libbox` via gomobile).
+ * sing-box adapter — PLACEHOLDER for v0.2.0.
  *
- * API surface (v1.14.3, verified from source):
- * - Libbox.setup(SetupOptions)
- * - Libbox.newCommandServer(handler, platformInterface) -> CommandServer
- * - CommandServer.start() / close()
- * - CommandServer.startOrReloadService() / closeService()
+ * The real implementation targets the official `libbox.aar` built from
+ * SagerNet/sing-box `experimental/libbox` via gomobile, but it is
+ * deliberately NOT packaged yet:
  *
- * NOTE: sing-box takes its own JSON config format (not Xray's).
- * Config translation from Node -> sing-box JSON lands with the
- * feature work; the skeleton passes through raw JSON.
+ * 1. Both libbox.aar and libv2ray.aar ship `jni/arm64-v8a/libgojni.so`
+ *    under the same name -> mergeDebugNativeLibs fails.
+ * 2. Even renamed, two gomobile .so files mean two Go runtimes
+ *    (signal handlers, schedulers) in one process — not something to
+ *    validate blindly without a test device.
  *
- * The AAR is built in CI from official source — see
- * .github/workflows/build.yml. Do NOT substitute a hand-built AAR
- * from an unverified environment (cf. 2026-10-17 Xray perf incident).
+ * The dual-.so problem gets its own design pass in the sing-box phase.
+ * Until then every op reports "not implemented" and the UI keeps the
+ * core switcher (Xray works fully).
  */
 class SingBoxCore(private val appContext: Context) : ProxyCore {
 
     override val type: CoreType = CoreType.SING_BOX
-    override val version: String = "v1.14.3"
+    override val version: String = "v1.14.3 (not packaged)"
 
-    @Volatile
-    private var server: CommandServer? = null
+    override fun initialize(context: Context) = Unit
 
-    @Volatile
-    private var initialized = false
+    override fun start(configJson: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException("sing-box 核心尚未接入，当前版本仅支持 Xray"))
 
-    override fun initialize(context: Context) {
-        if (initialized) return
-        val opts = SetupOptions()
-        opts.basePath = context.filesDir.absolutePath
-        opts.workingPath = context.filesDir.absolutePath + "/singbox"
-        // TODO: tempPath, writable paths per libbox docs
-        Libbox.setup(opts)
-        initialized = true
-    }
+    override fun stop() = Unit
 
-    override fun start(configJson: String): Result<Unit> = runCatching {
-        initialize(appContext)
-        stop() // ensure clean state
-        // TODO: write configJson to the box working dir / pass via
-        // command server per libbox config flow, then:
-        val handler = BoxCommandHandler()
-        val platform = BoxPlatformInterface(appContext)
-        val s = Libbox.newCommandServer(handler, platform)
-        s.start()
-        // TODO: push config via s.startOrReloadService() once the
-        // config-handoff shape is confirmed against the built AAR.
-        server = s
-    }
+    override val isRunning: Boolean = false
 
-    override fun stop() {
-        try {
-            server?.closeService()
-            server?.close()
-        } catch (_: Throwable) {
-        } finally {
-            server = null
-        }
-    }
+    override suspend fun measureLatency(configJson: String): Long = -1L
 
-    override val isRunning: Boolean
-        get() = server != null
-
-    override suspend fun measureLatency(configJson: String): Long =
-        withContext(Dispatchers.IO) {
-            // TODO: spin up an ephemeral sing-box instance with the
-            // given config and measure against the test URL, mirroring
-            // the XrayCore approach. Returns -1 until wired.
-            -1L
-        }
-
-    override fun queryTrafficStats(): TrafficStats {
-        // TODO: query via command client once the stats API shape is
-        // confirmed against the built AAR.
-        return TrafficStats()
-    }
-
-    // ── libbox plumbing ──────────────────────────────────────────
-
-    /**
-     * Minimal CommandServerHandler. Only the callbacks we need are
-     * meaningfully implemented; the rest are no-ops for the skeleton.
-     */
-    private class BoxCommandHandler : CommandServerHandler {
-        override fun writeLog(message: String?) {
-            // TODO: route to Android log / in-app log viewer
-        }
-    }
-
-    /**
-     * Minimal PlatformInterface for TUN integration.
-     * Full method set lands with the VPN plumbing work.
-     */
-    private class BoxPlatformInterface(
-        private val context: Context
-    ) : PlatformInterface {
-        // TODO: implement TUN open / route / DNS per
-        // experimental/libbox PlatformInterface contract.
-    }
+    override fun queryTrafficStats(): TrafficStats = TrafficStats()
 }

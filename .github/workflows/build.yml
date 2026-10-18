@@ -42,48 +42,48 @@ jobs:
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.10.10/libv2ray.aar
           ls -lh app/libs/libv2ray.aar
 
-      - name: Build sing-box libbox AAR from official source
-        run: |
-          # sing-box publishes no official AAR; build experimental/libbox
-          # from official source via gomobile (same method NekoBox uses).
-          #
-          # PERF WARNING (2026-10-17): self-built cores from this CI
-          # environment showed ~6x latency vs official builds. If the
-          # sing-box core feels slow, suspect the toolchain first and
-          # compare against a known-good reference before blaming code.
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          export PATH=$PATH:$(go env GOPATH)/bin
-          gomobile init
-          git clone --depth 1 --branch v1.14.3 \
-            https://github.com/SagerNet/sing-box.git /tmp/sing-box
-          cd /tmp/sing-box
-          # Newer gomobile requires the tool directive in the module graph.
-          go get -tool golang.org/x/mobile/cmd/gobind
-          go mod tidy
-          gomobile bind \
-            -androidapi 24 \
-            -trimpath \
-            -ldflags='-s -w -buildid= -checklinkname=0' \
-            -o /tmp/libbox.aar \
-            ./experimental/libbox
-          cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
-          # Both AARs embed the gomobile Java runtime (go.Seq, go.Universe…),
-          # which fails checkDebugDuplicateClasses. Strip it from OUR
-          # libbox.aar and keep the official libv2ray.aar's copy —
-          # the bridge API is stable across both builds.
-          cd /tmp
-          rm -rf libbox_fix && mkdir libbox_fix && cd libbox_fix
-          unzip -q /tmp/libbox.aar
-          mkdir -p classes && cd classes
-          unzip -q ../classes.jar
-          rm -rf go
-          rm ../classes.jar
-          zip -q -r ../classes.jar .
-          cd ..
-          rm -f /tmp/libbox.aar
-          zip -q -r /tmp/libbox.aar .
-          cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
-          ls -lh $GITHUB_WORKSPACE/app/libs/
+      # ── sing-box AAR: DISABLED for v0.2.0 ──────────────────────────
+      # Both libbox.aar and libv2ray.aar ship jni/arm64-v8a/libgojni.so
+      # under the same name, so mergeDebugNativeLibs fails; and two
+      # gomobile .so files mean two Go runtimes in one process, which
+      # needs a dedicated design pass (not blind validation).
+      # Re-enable this whole step with the sing-box phase, together with
+      # the `implementation(files("libs/libbox.aar"))` line in
+      # app/build.gradle.kts and the real SingBoxCore implementation.
+      # (Step body preserved below, commented out.)
+      #
+      # - name: Build sing-box libbox AAR from official source
+      #   run: |
+      #     go install golang.org/x/mobile/cmd/gomobile@latest
+      #     export PATH=$PATH:$(go env GOPATH)/bin
+      #     gomobile init
+      #     git clone --depth 1 --branch v1.14.3 \
+      #       https://github.com/SagerNet/sing-box.git /tmp/sing-box
+      #     cd /tmp/sing-box
+      #     go get -tool golang.org/x/mobile/cmd/gobind
+      #     go mod tidy
+      #     gomobile bind \
+      #       -androidapi 24 \
+      #       -trimpath \
+      #       -ldflags='-s -w -buildid= -checklinkname=0' \
+      #       -o /tmp/libbox.aar \
+      #       ./experimental/libbox
+      #     cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
+      #     # strip duplicate gomobile runtime (libv2ray.aar keeps its copy)
+      #     cd /tmp
+      #     rm -rf libbox_fix && mkdir libbox_fix && cd libbox_fix
+      #     unzip -q /tmp/libbox.aar
+      #     mkdir -p classes && cd classes
+      #     unzip -q ../classes.jar
+      #     rm -rf go
+      #     rm ../classes.jar
+      #     zip -q -r ../classes.jar .
+      #     cd ..
+      #     rm -f /tmp/libbox.aar
+      #     zip -q -r /tmp/libbox.aar .
+      #     cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
+      #     ls -lh $GITHUB_WORKSPACE/app/libs/
+      # ── end disabled sing-box step ─────────────────────────────────
 
       - name: Build debug APK (arm64-v8a)
         run: |
