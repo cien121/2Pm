@@ -172,6 +172,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Persist edited node fields. */
+    fun updateNode(node: Node) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { dao.update(node) }
+        }
+    }
+
     /** Test all nodes with the configured concurrency. */
     fun testAllNodes() {
         viewModelScope.launch {

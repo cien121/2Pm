@@ -128,7 +128,7 @@ fun CianCoreNavGraph(
             composable(Dest.Nodes.route) { NodesScreen(vm) }
             composable(Dest.Settings.route) { SettingsScreen(onNavigate = { nav.navigate(it) }) }
             composable("apps") { AppsScreen() }
-            composable("routing") { RoutingScreen() }
+            composable("routing") { RoutingScreen(vm) }
             composable("dns") { DnsScreen() }
         }
     }

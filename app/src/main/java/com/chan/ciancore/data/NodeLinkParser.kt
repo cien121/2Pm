@@ -10,7 +10,7 @@ import java.net.URLDecoder
  * Share-link → [Node] parser.
  *
  * Supported schemes: vless://, vmess://, trojan://, ss://,
- * hysteria2:// (hy2://), tuic://.
+ * socks:// (socks5://), hysteria2:// (hy2://), tuic://.
  *
  * Query-parameter mapping follows the v2rayNG convention
  * (type/security/sni/fp/alpn/pbk/sid/spx/flow/insecure/...).
@@ -30,6 +30,7 @@ object NodeLinkParser {
             "ss", "shadowsocks" -> parseSs(link)
             "hysteria2", "hy2" -> parseHysteria2(link)
             "tuic" -> parseTuic(link)
+            "socks", "socks5" -> parseSocks(link)
             else -> throw IllegalArgumentException("不支持的协议：$scheme")
         }
     }
@@ -287,6 +288,36 @@ object NodeLinkParser {
             bandwidthDown = q("downmbps")?.let { "$it mbps" }.orEmpty(),
             obfsPassword = q("obfs-password").orEmpty(),
             portHopping = q("mport").orEmpty(),
+            coreType = CoreType.XRAY
+        )
+    }
+
+    // ── socks5 ────────────────────────────────────────────────────
+
+    private fun parseSocks(link: String): Node {
+        val uri = Uri.parse(link)
+        var userInfo = decode(uri.encodedUserInfo.orEmpty())
+        // userinfo is often base64("user:pass")
+        if (userInfo.isNotEmpty() && ":" !in userInfo) {
+            try {
+                val decoded = decodeBase64(userInfo)
+                if (Regex("^[\\x20-\\x7E]+:[\\x20-\\x7E]*$").matches(decoded)) {
+                    userInfo = decoded
+                }
+            } catch (_: Exception) { /* keep raw userinfo */ }
+        }
+        val user = userInfo.substringBefore(":").trim()
+        val pass = if (":" in userInfo) userInfo.substringAfter(":") else ""
+        checkHostPort(uri.host, uri.port, "socks5")
+        return Node(
+            name = nodeName(uri, "${uri.host}:${uri.port}"),
+            rawLink = link,
+            protocol = "socks",
+            host = uri.host!!,
+            port = uri.port,
+            uuid = user,
+            password = pass,
+            network = "tcp",
             coreType = CoreType.XRAY
         )
     }

@@ -25,7 +25,13 @@ object XrayConfigBuilder {
         val remoteDns: String = "",
         val directDns: String = "",
         val fakeDns: Boolean = false,
-        val bypassLan: Boolean = true
+        val bypassLan: Boolean = true,
+        /**
+         * Chain proxy: when set (and different from the main node),
+         * the main outbound dials through this node's outbound
+         * (Xray `proxySettings.tag = "front"`).
+         */
+        val chainNode: Node? = null
     )
 
     /** Full runnable config for [node], including TUN plumbing. */
@@ -45,12 +51,20 @@ object XrayConfigBuilder {
                 .put(socksInbound())
                 .put(tunInbound())
         )
-        config.put(
-            "outbounds", JSONArray()
-                .put(buildOutbound(node))
-                .put(directOutbound())
-                .put(blockOutbound())
-        )
+        val mainOutbound = buildOutbound(node, "proxy")
+        val outbounds = JSONArray().put(mainOutbound)
+        // Chain proxy: main outbound dials through the front node.
+        // A broken chain node must never break the main connection.
+        val chain = options.chainNode
+        if (chain != null && chain.id != 0L && chain.id != node.id) {
+            val frontOutbound = runCatching { buildOutbound(chain, "front") }.getOrNull()
+            if (frontOutbound != null) {
+                outbounds.put(frontOutbound)
+                mainOutbound.put("proxySettings", JSONObject().put("tag", "front"))
+            }
+        }
+        outbounds.put(directOutbound()).put(blockOutbound())
+        config.put("outbounds", outbounds)
         config.put("routing", routingObject(options))
         config.put("dns", dnsObject(options))
         if (options.fakeDns) {
@@ -88,16 +102,19 @@ object XrayConfigBuilder {
     }
 
     /** The single "proxy" outbound for [node]. */
-    fun buildOutbound(node: Node): JSONObject {
-        return when (node.protocol.lowercase()) {
+    fun buildOutbound(node: Node, tag: String = "proxy"): JSONObject {
+        val ob = when (node.protocol.lowercase()) {
             "vless" -> vlessOutbound(node)
             "vmess" -> vmessOutbound(node)
             "trojan" -> trojanOutbound(node)
             "ss", "shadowsocks" -> shadowsocksOutbound(node)
+            "socks", "socks5" -> socksOutbound(node)
             "hysteria2", "hy2" -> hysteria2Outbound(node)
             "tuic" -> throw IllegalArgumentException("tuic 协议需要 sing-box 核心，当前版本暂不支持")
             else -> throw IllegalArgumentException("Xray 核心不支持协议：${node.protocol}")
         }
+        ob.put("tag", tag)
+        return ob
     }
 
     // ── template pieces ─────────────────────────────────────────
@@ -320,6 +337,25 @@ object XrayConfigBuilder {
             .put("protocol", "shadowsocks")
             .put("settings", JSONObject().put("servers", JSONArray().put(server)))
             .put("streamSettings", streamSettings(n))
+    }
+
+    private fun socksOutbound(n: Node): JSONObject {
+        val server = JSONObject()
+            .put("address", n.host)
+            .put("port", n.port)
+        if (n.uuid.isNotBlank()) {
+            server.put(
+                "users", JSONArray().put(
+                    JSONObject()
+                        .put("user", n.uuid)
+                        .put("pass", n.password)
+                )
+            )
+        }
+        return JSONObject()
+            .put("tag", "proxy")
+            .put("protocol", "socks")
+            .put("settings", JSONObject().put("servers", JSONArray().put(server)))
     }
 
     private fun hysteria2Outbound(n: Node): JSONObject {

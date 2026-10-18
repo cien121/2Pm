@@ -19,6 +19,7 @@ import com.chan.ciancore.core.CoreRegistry
 import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.xray.XrayConfigBuilder
 import com.chan.ciancore.core.xray.XrayCore
+import com.chan.ciancore.data.ChainPrefs.chainNodeId
 import com.chan.ciancore.data.DnsPrefs.bypassLan
 import com.chan.ciancore.data.DnsPrefs.directDns
 import com.chan.ciancore.data.DnsPrefs.fakeDns
@@ -103,7 +104,8 @@ class CianCoreVpnService : VpnService() {
                     remoteDns = remoteDns,
                     directDns = directDns,
                     fakeDns = fakeDns,
-                    bypassLan = bypassLan
+                    bypassLan = bypassLan,
+                    chainNode = resolveChainNode(node.id)
                 )
             )
 
@@ -209,6 +211,17 @@ class CianCoreVpnService : VpnService() {
         val dao = CianCoreApp.instance.database.nodeDao()
         return dao.getById(nodeId)
             ?: throw IllegalArgumentException("节点不存在（可能已被删除）")
+    }
+
+    /** Chain-proxy node, or null when disabled / same as main / missing. */
+    private suspend fun resolveChainNode(mainId: Long): Node? {
+        val chainId = chainNodeId
+        if (chainId <= 0 || chainId == mainId) return null
+        return try {
+            CianCoreApp.instance.database.nodeDao().getById(chainId)
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     override fun onDestroy() {

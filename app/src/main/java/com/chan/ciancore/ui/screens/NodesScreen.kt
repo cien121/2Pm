@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +72,8 @@ fun NodesScreen(vm: MainViewModel) {
     val testingIds by vm.testingIds.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Node?>(null) }
+    var nodeAction by remember { mutableStateOf<Node?>(null) }
+    var editingNode by remember { mutableStateOf<Node?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -111,7 +115,7 @@ fun NodesScreen(vm: MainViewModel) {
                 }
             }
             Text(
-                text = "${nodeList.size} 个信号源 · 长按删除 · 点延迟测速",
+                text = "${nodeList.size} 个信号源 · 长按管理 · 点延迟测速",
                 fontSize = 13.sp,
                 color = InkSecondary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -134,7 +138,7 @@ fun NodesScreen(vm: MainViewModel) {
                             node = node,
                             testing = testingIds.contains(node.id),
                             onClick = { vm.selectNode(node) },
-                            onLongClick = { pendingDelete = node },
+                            onLongClick = { nodeAction = node },
                             onTest = { vm.testRealConnection(node) }
                         )
                     }
@@ -165,6 +169,49 @@ fun NodesScreen(vm: MainViewModel) {
             },
             onAddBatch = { text, onResult -> vm.addNodesFromText(text, onResult) },
             onAddSubscription = { url, onResult -> vm.addNodesFromSubscription(url, onResult) }
+        )
+    }
+
+    nodeAction?.let { node ->
+        AlertDialog(
+            onDismissRequest = { nodeAction = null },
+            title = { Text(node.name, color = InkPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            editingNode = node
+                            nodeAction = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("编辑节点", color = AuroraCyan) }
+                    TextButton(
+                        onClick = {
+                            pendingDelete = node
+                            nodeAction = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("删除节点", color = SignalError) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { nodeAction = null }) {
+                    Text("取消", color = InkSecondary)
+                }
+            },
+            containerColor = NightSurface
+        )
+    }
+
+    editingNode?.let { node ->
+        EditNodeDialog(
+            node = node,
+            onDismiss = { editingNode = null },
+            onSave = { updated ->
+                vm.updateNode(updated)
+                editingNode = null
+            }
         )
     }
 
@@ -428,4 +475,111 @@ private fun EmptyNodesArt(modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+/**
+ * Manual node editor: fixes mis-parsed imports.
+ * Edits the structured fields used to build the connection
+ * (name, host, port, credentials). Protocol itself is fixed.
+ */
+@Composable
+private fun EditNodeDialog(
+    node: Node,
+    onDismiss: () -> Unit,
+    onSave: (Node) -> Unit
+) {
+    var name by remember(node.id) { mutableStateOf(node.name) }
+    var host by remember(node.id) { mutableStateOf(node.host) }
+    var port by remember(node.id) { mutableStateOf(node.port.toString()) }
+    var uuid by remember(node.id) { mutableStateOf(node.uuid) }
+    var password by remember(node.id) { mutableStateOf(node.password) }
+    var method by remember(node.id) { mutableStateOf(node.method) }
+    var error by remember(node.id) { mutableStateOf<String?>(null) }
+
+    val proto = node.protocol.lowercase()
+    val uuidLabel = when (proto) {
+        "vless", "vmess" -> "用户 ID (UUID)"
+        "trojan" -> "密码"
+        "ss", "shadowsocks" -> "密码"
+        "hysteria2", "hy2" -> "认证密码"
+        "socks", "socks5" -> "用户名"
+        "tuic" -> "UUID"
+        else -> "账号"
+    }
+    val showPassword = proto == "tuic" || proto == "socks" || proto == "socks5"
+    val showMethod = proto == "ss" || proto == "shadowsocks"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑节点 · ${node.protocol.uppercase()}", color = InkPrimary) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it; error = null },
+                    label = { Text("备注名") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = host, onValueChange = { host = it; error = null },
+                    label = { Text("服务器地址") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = port, onValueChange = { port = it.filter { c -> c.isDigit() }; error = null },
+                    label = { Text("端口") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = uuid, onValueChange = { uuid = it; error = null },
+                    label = { Text(uuidLabel) }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (showPassword) {
+                    OutlinedTextField(
+                        value = password, onValueChange = { password = it; error = null },
+                        label = { Text("密码") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (showMethod) {
+                    OutlinedTextField(
+                        value = method, onValueChange = { method = it; error = null },
+                        label = { Text("加密方式") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                error?.let {
+                    Text(text = it, fontSize = 12.sp, color = SignalError)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val p = port.toIntOrNull()
+                when {
+                    name.isBlank() -> error = "备注名不能为空"
+                    host.isBlank() -> error = "服务器地址不能为空"
+                    p == null || p !in 1..65535 -> error = "端口无效（1-65535）"
+                    uuid.isBlank() && proto != "socks" && proto != "socks5" -> error = "$uuidLabel 不能为空"
+                    else -> onSave(
+                        node.copy(
+                            name = name.trim(),
+                            host = host.trim(),
+                            port = p!!,
+                            uuid = uuid,
+                            password = password,
+                            method = method
+                        )
+                    )
+                }
+            }) { Text("保存", color = AuroraCyan) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }
+        },
+        containerColor = NightSurface
+    )
 }
