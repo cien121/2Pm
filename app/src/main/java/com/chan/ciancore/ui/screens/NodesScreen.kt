@@ -55,7 +55,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chan.ciancore.data.Node
+import com.chan.ciancore.data.NodeLinkGenerator
 import com.chan.ciancore.data.SubscriptionManager
+import com.chan.ciancore.data.ChainPrefs.chainNodeId
 import com.chan.ciancore.ui.MainViewModel
 import com.chan.ciancore.ui.components.AuroraBackground
 import com.chan.ciancore.ui.components.LatencyBar
@@ -83,6 +85,7 @@ fun NodesScreen(vm: MainViewModel) {
     var pendingDelete by remember { mutableStateOf<Node?>(null) }
     var nodeAction by remember { mutableStateOf<Node?>(null) }
     var editingNode by remember { mutableStateOf<Node?>(null) }
+    var showChainPicker by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -206,10 +209,27 @@ fun NodesScreen(vm: MainViewModel) {
             onAddBatch = { text, onResult -> vm.addNodesFromText(text, onResult) },
             onAddSubscription = { url, onResult -> vm.addNodesFromSubscription(url, onResult) },
             onCreateManual = { protocol ->
-                vm.createManualNode(protocol) { node ->
-                    editingNode = node
+                if (protocol == "chain") {
+                    showAdd = false
+                    showChainPicker = true
+                } else {
+                    vm.createManualNode(protocol) { node ->
+                        editingNode = node
+                    }
                 }
             }
+        )
+    }
+
+    // Chain proxy picker: select the front node.
+    if (showChainPicker) {
+        ChainNodePickerDialog(
+            nodes = nodeList,
+            onDismiss = { showChainPicker = false },
+            onPick = { node ->
+                showChainPicker = false
+            },
+            vm = vm
         )
     }
 
@@ -379,7 +399,8 @@ private fun AddNodeDialog(
         "ss" to "Shadowsocks",
         "socks" to "SOCKS",
         "http" to "HTTP",
-        "hysteria2" to "Hysteria2"
+        "hysteria2" to "Hysteria2",
+        "chain" to "⛓️ 链式代理"
     )
 
     AlertDialog(
@@ -816,6 +837,95 @@ private fun EditSection(title: String) {
         fontWeight = FontWeight.Bold,
         color = AuroraCyan,
         modifier = Modifier.padding(top = 6.dp)
+    )
+}
+
+@Composable
+private fun ChainNodePickerDialog(
+    nodes: List<Node>,
+    onDismiss: () -> Unit,
+    onPick: (Node?) -> Unit,
+    vm: MainViewModel
+) {
+    val context = LocalContext.current
+    val currentChainId = remember { context.chainNodeId }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("⛓️ 链式代理", color = InkPrimary) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "选择前置节点，当前选中节点的流量将经它转发",
+                    fontSize = 12.sp,
+                    color = InkSecondary
+                )
+                Spacer(Modifier.height(4.dp))
+                // Disable option
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(
+                            1.dp,
+                            if (currentChainId == -1L) AuroraCyan else NightOutline,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .combinedClickable(onClick = {
+                            com.chan.ciancore.data.ChainPrefs.run {
+                                context.chainNodeId = -1L
+                            }
+                            onPick(null)
+                        })
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "不启用",
+                        fontSize = 14.sp,
+                        color = if (currentChainId == -1L) AuroraCyan else InkPrimary
+                    )
+                }
+                nodes.forEach { node ->
+                    val selected = node.id == currentChainId
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(
+                                1.dp,
+                                if (selected) AuroraCyan else NightOutline,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .combinedClickable(onClick = {
+                                context.chainNodeId = node.id
+                                onPick(node)
+                            })
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = node.name,
+                                fontSize = 14.sp,
+                                color = if (selected) AuroraCyan else InkPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${node.protocol.uppercase()} · ${node.host}:${node.port}",
+                                fontSize = 11.sp,
+                                color = InkSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }
+        },
+        containerColor = NightSurface
     )
 }
 

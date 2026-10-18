@@ -45,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.chan.ciancore.data.ChainPrefs.chainNodeId
 import com.chan.ciancore.data.RoutePrefs
 import com.chan.ciancore.ui.components.AuroraBackground
 import com.chan.ciancore.ui.theme.AuroraCyan
@@ -72,10 +71,7 @@ fun RoutingScreen(vm: com.chan.ciancore.ui.MainViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RoutePrefs.RoutingRule?>(null) }
     var showDomainStrategy by remember { mutableStateOf(false) }
-    var showChain by remember { mutableStateOf(false) }
-    var chainId by remember { mutableStateOf(context.chainNodeId) }
     val nodeList by vm.nodes.collectAsState()
-    val chainNode = nodeList.firstOrNull { it.id == chainId }
 
     fun saveRules(next: List<RoutePrefs.RoutingRule>) {
         rules = next
@@ -161,39 +157,6 @@ fun RoutingScreen(vm: com.chan.ciancore.ui.MainViewModel) {
                         )
                     }
                     Text(text = "🔒", fontSize = 16.sp)
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Chain proxy card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(NightSurface.copy(alpha = 0.85f))
-                    .border(1.dp, NightOutline, RoundedCornerShape(16.dp))
-                    .combinedClickable(onClick = { showChain = true })
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "链式代理",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = InkPrimary
-                        )
-                        Text(
-                            text = chainNode?.let { "${it.name}（${it.protocol.uppercase()}）" }
-                                ?: "未启用",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (chainNode != null) AuroraCyan else InkSecondary
-                        )
-                    }
-                    Text(text = "›", color = InkSecondary, fontSize = 20.sp)
                 }
             }
 
@@ -311,18 +274,6 @@ fun RoutingScreen(vm: com.chan.ciancore.ui.MainViewModel) {
         )
     }
 
-    if (showChain) {
-        ChainPickerDialog(
-            nodes = nodeList,
-            selectedId = chainId,
-            onDismiss = { showChain = false },
-            onPick = { id ->
-                chainId = id
-                context.chainNodeId = id
-                showChain = false
-            }
-        )
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -524,111 +475,6 @@ private fun RuleEditDialog(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChipOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) AuroraCyan.copy(alpha = 0.2f) else Color.Transparent)
-            .border(
-                1.dp,
-                if (selected) AuroraCyan else NightOutline,
-                RoundedCornerShape(10.dp)
-            )
-            .combinedClickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            color = if (selected) AuroraCyan else InkSecondary,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
 
-// ── chain proxy picker (unchanged) ───────────────────────────────
 
-@Composable
-private fun ChainPickerDialog(
-    nodes: List<com.chan.ciancore.data.Node>,
-    selectedId: Long,
-    onDismiss: () -> Unit,
-    onPick: (Long) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("前置代理节点", color = InkPrimary) },
-        text = {
-            androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                item {
-                    ChainPickerRow(
-                        title = "不使用",
-                        subtitle = "直连出站",
-                        selected = selectedId <= 0,
-                        onClick = { onPick(-1L) }
-                    )
-                }
-                items(nodes, key = { it.id }) { node ->
-                    ChainPickerRow(
-                        title = node.name,
-                        subtitle = "${node.protocol.uppercase()} · ${node.host}:${node.port}",
-                        selected = node.id == selectedId,
-                        onClick = { onPick(node.id) }
-                    )
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }
-        },
-        containerColor = NightSurface
-    )
-}
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChainPickerRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (selected) AuroraCyan.copy(alpha = 0.12f)
-                else Color.Transparent
-            )
-            .border(
-                1.dp,
-                if (selected) AuroraCyan.copy(alpha = 0.6f) else NightOutline,
-                RoundedCornerShape(12.dp)
-            )
-            .combinedClickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = InkPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(text = subtitle, fontSize = 11.sp, color = InkSecondary)
-        }
-        if (selected) {
-            Text(text = "●", color = AuroraCyan, fontSize = 12.sp)
-        }
-    }
-}
