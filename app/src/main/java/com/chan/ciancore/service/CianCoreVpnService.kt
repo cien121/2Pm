@@ -74,9 +74,11 @@ class CianCoreVpnService : VpnService() {
                 val nodeId = intent.getLongExtra(EXTRA_NODE_ID, -1)
                 scope.launch {
                     // Tear down current tunnel immediately, then connect.
+                    try {
+                        (CoreRegistry.getOrNull(CoreType.XRAY) as? XrayCore)?.stop()
+                    } catch (_: Throwable) { }
                     try { tunFd?.close() } catch (_: Throwable) { }
                     tunFd = null
-                    try { xrayCore?.stop() } catch (_: Throwable) { }
                     _state.value = ConnectionState.IDLE
                     connect(nodeId)
                 }
