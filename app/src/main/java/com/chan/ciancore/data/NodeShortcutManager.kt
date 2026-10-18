@@ -35,7 +35,7 @@ object NodeShortcutManager {
         val shortcut = ShortcutInfo.Builder(context, "node_${node.id}")
             .setShortLabel(node.name.take(12))
             .setLongLabel("连接 ${node.name}")
-            .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
+            .setIcon(Icon.createWithResource(context, R.drawable.ic_tile_vpn))
             .setIntent(intent)
             .build()
 
@@ -63,7 +63,7 @@ object NodeShortcutManager {
                 ShortcutInfo.Builder(context, "node_${node.id}")
                     .setShortLabel(node.name.take(12))
                     .setLongLabel("连接 ${node.name}")
-                    .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
+                    .setIcon(Icon.createWithResource(context, R.drawable.ic_tile_vpn))
                     .setIntent(intent)
                     .build()
             }

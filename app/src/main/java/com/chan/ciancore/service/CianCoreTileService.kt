@@ -58,7 +58,7 @@ class CianCoreTileService : TileService() {
             tile.label = getString(R.string.app_name)
             tile.subtitle = if (connected) "已连接" else "未连接"
             try {
-                tile.icon = Icon.createWithResource(this, R.mipmap.ic_launcher)
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_vpn)
             } catch (_: Throwable) {
             }
             tile.updateTile()
