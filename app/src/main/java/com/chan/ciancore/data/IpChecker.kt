@@ -6,12 +6,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.URL
 
 /**
  * Egress IP check: what the internet sees through the tunnel.
  * Uses the user-configured info URL (default api.ip.sb/geoip),
  * falls back to plain-text ipify endpoints. Auto-detects IPv4/IPv6.
+ *
+ * IMPORTANT: The request goes through the local SOCKS inbound (127.0.0.1:10808)
+ * so it traverses the tunnel. A direct connection would bypass the VPN
+ * (the app's own package is excluded from the TUN to avoid loops) and
+ * return the real IP instead of the egress IP.
  */
 object IpChecker {
 
@@ -27,9 +34,11 @@ object IpChecker {
 
     private fun checkUrl(url: String): IpInfo? {
         return try {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8000
-                readTimeout = 8000
+            // Route through Xray's SOCKS inbound so the check exits via the tunnel.
+            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 10808))
+            val conn = (URL(url).openConnection(proxy) as HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 10000
                 setRequestProperty("User-Agent", "CianCore/1.0")
             }
             try {
