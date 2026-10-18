@@ -581,7 +581,7 @@ private fun EditNodeDialog(
                         listOf("tcp", "ws", "xhttp", "grpc", "httpupgrade", "kcp", "h2"),
                         network, onSelect = { network = it }
                     )
-                    EditChips(
+                    EditChipsPairs(
                         "传输安全",
                         listOf("" to "无", "tls" to "TLS", "reality" to "Reality"),
                         security, onSelect = { security = it }
@@ -747,11 +747,11 @@ private fun EditChips(
     options: List<String>,
     selected: String,
     onSelect: (String) -> Unit
-) = EditChips(label, options.map { it to it }, selected, onSelect)
+) = EditChipsPairs(label, options.map { it to it }, selected, onSelect)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun EditChips(
+private fun EditChipsPairs(
     label: String,
     options: List<Pair<String, String>>,
     selected: String,
