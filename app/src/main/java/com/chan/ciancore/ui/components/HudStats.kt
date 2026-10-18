@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.alignByBaseline
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -94,15 +95,17 @@ private fun HudPill(
                 fontWeight = FontWeight.Medium
             )
             Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.Baseline) {
+            Row {
                 Text(
                     text = value,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = InkPrimary
+                    color = InkPrimary,
+                    modifier = Modifier.alignByBaseline()
                 )
                 Spacer(Modifier.width(3.dp))
-                Text(text = unit, fontSize = 11.sp, color = accent)
+                Text(text = unit, fontSize = 11.sp, color = accent,
+                    modifier = Modifier.alignByBaseline())
             }
             // accent underline
             Spacer(Modifier.height(4.dp))
