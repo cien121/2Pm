@@ -165,7 +165,11 @@ class CianCoreVpnService : VpnService() {
             cleanupLocked()
         } catch (_: Throwable) {
         }
-        _state.value = ConnectionState.IDLE
+        // Preserve ERROR so the message stays on screen until the user retries;
+        // stopSelf() after a failed connect would otherwise wipe it instantly.
+        if (_state.value != ConnectionState.ERROR) {
+            _state.value = ConnectionState.IDLE
+        }
         super.onDestroy()
     }
 
