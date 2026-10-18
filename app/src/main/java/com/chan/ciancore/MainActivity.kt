@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             vm.onVpnPermissionGranted()
+            vm.onShortcutVpnPermissionGranted()
         }
     }
 
@@ -53,7 +54,9 @@ class MainActivity : ComponentActivity() {
         if (nodeId != -1L) {
             // Clear the extra so it doesn't re-trigger on rotation.
             intent?.removeExtra(com.chan.ciancore.data.NodeShortcutManager.EXTRA_CONNECT_NODE_ID)
-            vm.connectToNode(nodeId)
+            vm.connectToNode(nodeId) { permissionIntent ->
+                vpnPermissionLauncher.launch(permissionIntent)
+            }
         }
     }
 }

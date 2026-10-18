@@ -62,6 +62,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _selectedId.value = withContext(Dispatchers.IO) { dao.getSelected()?.id }
         }
+        // Update home-screen dynamic shortcuts when nodes change.
+        viewModelScope.launch {
+            nodes.collect { list ->
+                try {
+                    NodeShortcutManager.updateDynamicShortcuts(getApplication(), list)
+                } catch (_: Throwable) {
+                }
+            }
+        }
         // Refresh egress IP whenever the tunnel connects.
         viewModelScope.launch {
             connectionState.collect { state ->
@@ -159,19 +168,53 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Connect directly to a node by ID (from home screen shortcut).
-     * Selects the node first, then initiates connection.
+     * Selects the node, then connects if VPN permission is granted.
+     * @param requestVpnPermission invoked with the system VPN permission
+     * intent when the user hasn't granted it yet.
      */
-    fun connectToNode(nodeId: Long) {
+    fun connectToNode(nodeId: Long, requestVpnPermission: (Intent) -> Unit) {
         viewModelScope.launch {
             val node = withContext(Dispatchers.IO) { dao.getById(nodeId) } ?: return@launch
-            selectNode(node)
-            // Give selection a moment to persist, then connect.
+            // Select first
+            _selectedId.value = node.id
+            withContext(Dispatchers.IO) {
+                dao.clearSelection()
+                dao.selectById(node.id)
+            }
+            // Then connect (or request permission)
             val ctx = getApplication<Application>()
-            val permissionIntent = CianCoreVpnService.prepareIntent(ctx)
-            // Note: permission flow needs an Activity; the NavGraph handles it
-            // via onOrbClick. For shortcuts, we select and let the user tap.
-            _notice.value = "已选择 ${node.name}，点击核心连接"
+            when (connectionState.value) {
+                ConnectionState.IDLE, ConnectionState.ERROR -> {
+                    val permissionIntent = CianCoreVpnService.prepareIntent(ctx)
+                    if (permissionIntent != null) {
+                        // Need permission: store pending node and request
+                        _pendingShortcutNodeId.value = node.id
+                        requestVpnPermission(permissionIntent)
+                    } else {
+                        CianCoreVpnService.startConnect(ctx, node.id)
+                    }
+                }
+                ConnectionState.CONNECTED -> {
+                    // Already connected: switch to this node
+                    CianCoreVpnService.startDisconnect(ctx)
+                    // Reconnect after a brief delay
+                    kotlinx.coroutines.delay(500)
+                    CianCoreVpnService.startConnect(ctx, node.id)
+                }
+                else -> { /* connecting, ignore */ }
+            }
         }
+    }
+
+    /** Pending node ID from shortcut when VPN permission was requested. */
+    private val _pendingShortcutNodeId = MutableStateFlow<Long?>(null)
+
+    /** Called after VPN permission granted for a shortcut-initiated connection. */
+    fun onShortcutVpnPermissionGranted() {
+        val nodeId = _pendingShortcutNodeId.value ?: return
+        _pendingShortcutNodeId.value = null
+        val ctx = getApplication<Application>()
+        CianCoreVpnService.startConnect(ctx, nodeId)
     }
 
     /** Parse a share link and store it. Returns the error message, or null on success. */
