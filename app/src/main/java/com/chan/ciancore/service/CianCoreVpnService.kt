@@ -225,9 +225,11 @@ class CianCoreVpnService : VpnService() {
     }
 
     private suspend fun loadNode(nodeId: Long): Node {
-        if (nodeId <= 0) throw IllegalArgumentException("没有选中节点")
         val dao = CianCoreApp.instance.database.nodeDao()
-        return dao.getById(nodeId)
+        // If no ID given (e.g. from quick tile), use the remembered selected node.
+        val id = if (nodeId > 0) nodeId else dao.getSelected()?.id
+            ?: throw IllegalArgumentException("没有选中节点")
+        return dao.getById(id)
             ?: throw IllegalArgumentException("节点不存在（可能已被删除）")
     }
 
