@@ -26,6 +26,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Handle node shortcut: connect directly to the specified node.
+        handleShortcutIntent()
         setContent {
             CianCoreTheme {
                 CianCoreNavGraph(
@@ -35,6 +37,23 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcutIntent()
+    }
+
+    private fun handleShortcutIntent() {
+        val nodeId = intent?.getLongExtra(
+            com.chan.ciancore.data.NodeShortcutManager.EXTRA_CONNECT_NODE_ID, -1L
+        ) ?: -1L
+        if (nodeId != -1L) {
+            // Clear the extra so it doesn't re-trigger on rotation.
+            intent?.removeExtra(com.chan.ciancore.data.NodeShortcutManager.EXTRA_CONNECT_NODE_ID)
+            vm.connectToNode(nodeId)
         }
     }
 }

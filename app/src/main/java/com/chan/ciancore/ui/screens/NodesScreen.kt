@@ -78,6 +78,7 @@ import com.chan.ciancore.ui.theme.latencyColor
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NodesScreen(vm: MainViewModel) {
+    val context = LocalContext.current
     val nodeList by vm.nodes.collectAsState()
     val testingIds by vm.testingIds.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
@@ -245,6 +246,20 @@ fun NodesScreen(vm: MainViewModel) {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("编辑节点", color = AuroraCyan) }
+                    TextButton(
+                        onClick = {
+                            val ok = com.chan.ciancore.data.NodeShortcutManager.pinNodeShortcut(
+                                context, node
+                            )
+                            android.widget.Toast.makeText(
+                                context,
+                                if (ok) "已发送到桌面" else "当前系统不支持",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            nodeAction = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("添加到桌面", color = InkPrimary) }
                     TextButton(
                         onClick = {
                             pendingDelete = node

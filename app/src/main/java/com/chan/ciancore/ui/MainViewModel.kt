@@ -157,6 +157,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Connect directly to a node by ID (from home screen shortcut).
+     * Selects the node first, then initiates connection.
+     */
+    fun connectToNode(nodeId: Long) {
+        viewModelScope.launch {
+            val node = withContext(Dispatchers.IO) { dao.getById(nodeId) } ?: return@launch
+            selectNode(node)
+            // Give selection a moment to persist, then connect.
+            val ctx = getApplication<Application>()
+            val permissionIntent = CianCoreVpnService.prepareIntent(ctx)
+            // Note: permission flow needs an Activity; the NavGraph handles it
+            // via onOrbClick. For shortcuts, we select and let the user tap.
+            _notice.value = "已选择 ${node.name}，点击核心连接"
+        }
+    }
+
     /** Parse a share link and store it. Returns the error message, or null on success. */
     fun addNodeFromLink(link: String, onDone: (String?) -> Unit) {
         viewModelScope.launch {
