@@ -738,6 +738,10 @@ private fun EditNodeDialog(
                     "anytls" -> {
                         EditField("密码", password, onChange = { password = it; error = null })
                     }
+                    "wireguard" -> {
+                        EditField("本地私钥", uuid, onChange = { uuid = it; error = null })
+                        EditField("对端公钥", password, onChange = { password = it })
+                    }
                     else -> EditField("认证密码", uuid, onChange = { uuid = it; error = null })
                 }
 

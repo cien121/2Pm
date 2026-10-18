@@ -33,6 +33,7 @@ object NodeLinkParser {
             "socks", "socks5" -> parseSocks(link)
             "http" -> parseHttp(link)
             "anytls" -> parseAnytls(link)
+            "wireguard" -> parseWireguard(link)
             else -> throw IllegalArgumentException("不支持的协议：$scheme")
         }
     }
@@ -401,6 +402,26 @@ password=<redacted>
             security = "tls",
             sni = q("sni").orEmpty(),
             insecure = insecure,
+            coreType = CoreType.SING_BOX
+        )
+    }
+
+    private fun parseWireguard(link: String): Node {
+        val uri = Uri.parse(link)
+        val privateKey = decode(uri.encodedUserInfo.orEmpty())
+        require(privateKey.isNotBlank()) { "wireguard 链接缺少私钥（privateKey@...）" }
+        checkHostPort(uri.host, uri.port, "wireguard")
+        fun q(name: String): String? = uri.getQueryParameter(name)?.takeIf { it.isNotEmpty() }
+        val publicKey = q("publickey") ?: q("publicKey") ?: q("peer")
+        require(!publicKey.isNullOrBlank()) { "wireguard 链接缺少对端公钥（?publickey=...）" }
+        return Node(
+            name = nodeName(uri, "${uri.host}:${uri.port}"),
+            rawLink = link,
+            protocol = "wireguard",
+            host = uri.host!!,
+            port = uri.port,
+            uuid = privateKey,
+            password = publicKey,
             coreType = CoreType.SING_BOX
         )
     }
