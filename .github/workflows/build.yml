@@ -29,7 +29,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.27"
+          # sing-box v1.14.3's go.mod says 1.25.5; Go 1.27 breaks its
+          # go:linkname to os.checkPidfdOnce at link time.
+          go-version: "1.25"
 
       - name: Download official Xray-core AAR
         run: |
