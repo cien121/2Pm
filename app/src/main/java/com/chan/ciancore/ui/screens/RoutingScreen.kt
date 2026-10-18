@@ -136,7 +136,7 @@ fun RoutingScreen(vm: com.chan.ciancore.ui.MainViewModel) {
 
             Spacer(Modifier.height(8.dp))
 
-            // DNS anti-leak system rule (locked)
+            // DNS anti-leak indicator
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -155,7 +155,7 @@ fun RoutingScreen(vm: com.chan.ciancore.ui.MainViewModel) {
                             color = Color(0xFF81C784)
                         )
                         Text(
-                            text = "全部 DNS 查询经 Xray 内置 DNS 解析，不出隧道",
+                            text = "全部 DNS 查询经隧道解析，不出本地网络",
                             fontSize = 11.sp,
                             color = InkSecondary
                         )

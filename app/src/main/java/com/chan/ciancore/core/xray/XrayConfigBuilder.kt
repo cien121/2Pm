@@ -178,22 +178,15 @@ object XrayConfigBuilder {
      * Routing section.
      *
      * Rule order matters (first match wins):
-     * 1. DNS anti-leak (locked): UDP port 53 -> Xray's built-in DNS.
-     *    Every DNS query is answered inside the tunnel — it can never
-     *    leak to the ISP or a third-party resolver.
-     * 2. User rules (enabled only), in list order.
+     * 1. User rules (enabled only), in list order.
+     *
+     * DNS goes to the TUN DNS server (1.1.1.1) through the tunnel via
+     * normal routing (default outbound = proxy), exactly like v2rayNG.
+     * No rule sends DNS direct, so it cannot leak outside the tunnel.
      */
     private fun routingObject(options: BuildOptions): JSONObject {
         val rules = JSONArray()
-        // 1. DNS anti-leak — always first, always on.
-        rules.put(
-            JSONObject()
-                .put("type", "field")
-                .put("port", 53)
-                .put("network", "udp")
-                .put("outboundTag", "dns")
-        )
-        // 2. User rules.
+        // User rules.
         for (rule in options.routingRules) {
             if (!rule.enabled) continue
             val field = JSONObject().put("type", "field")

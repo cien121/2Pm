@@ -12,10 +12,9 @@ import java.util.UUID
  * Each rule = remarks + match criteria (domains / ips / port / network)
  * + outboundTag (proxy / direct / block) + enable switch.
  *
- * DNS anti-leak: XrayConfigBuilder always injects a locked
- * `UDP port 53 -> "dns"` rule first, so every DNS query is answered
- * by Xray's own DNS (split horizon) and can never leak outside
- * the tunnel. It is not user-editable.
+ * DNS anti-leak: the TUN DNS server is reached through the tunnel via
+ * normal routing (default outbound = proxy); no rule ever sends DNS
+ * direct, so queries cannot leak outside the tunnel.
  */
 object RoutePrefs {
 
