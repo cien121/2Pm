@@ -212,11 +212,16 @@ object XrayConfigBuilder {
         // Loop protection: the DNS servers themselves must NOT match the
         // port-53 rule, or Xray's upstream queries would loop forever.
         if (options.localDnsEnabled) {
+            // Only literal IPs/CIDRs may go into an "ip" rule — the user
+            // may have configured DoH/DoT URLs (e.g. https://.../dns-query),
+            // which Xray rejects with "illegal ip rule".
+            val ipLike = Regex("^[0-9a-fA-F.:/]+$")
             val dnsServers = listOfNotNull(
                 options.remoteDns.ifBlank { null }?.split(",")?.map { it.trim() },
                 options.directDns.ifBlank { null }?.split(",")?.map { it.trim() },
                 listOf("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "223.5.5.5", "223.6.6.6")
-            ).flatten().distinct().filter { it.isNotBlank() }
+            ).flatten().distinct()
+                .filter { it.isNotBlank() && ipLike.matches(it) }
             if (dnsServers.isNotEmpty()) {
                 rules.put(
                     JSONObject()
