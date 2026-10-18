@@ -309,7 +309,7 @@ private fun CoreSelectorRow() {
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(
-                            if (selected) AuroraCyan.copy(alpha = 0.2f)
+                            if (selected) AuroraCyan.copy(alpha = 0.85f)
                             else Color.Transparent
                         )
                         .border(
@@ -326,7 +326,7 @@ private fun CoreSelectorRow() {
                         text = type.displayName,
                         fontSize = 14.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) AuroraCyan else InkSecondary
+                        color = if (selected) Color.White else InkPrimary
                     )
                 }
             }

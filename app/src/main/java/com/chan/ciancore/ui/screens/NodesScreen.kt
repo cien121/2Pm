@@ -975,7 +975,7 @@ private fun EditChipsPairs(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .background(
-                            if (isSel) AuroraCyan.copy(alpha = 0.2f)
+                            if (isSel) AuroraCyan.copy(alpha = 0.85f)
                             else NightOutline.copy(alpha = 0.4f)
                         )
                         .border(
@@ -989,7 +989,7 @@ private fun EditChipsPairs(
                     Text(
                         text = text.ifBlank { "无" },
                         fontSize = 12.sp,
-                        color = if (isSel) AuroraCyan else InkSecondary,
+                        color = if (isSel) Color.White else InkPrimary,
                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                     )
                 }

@@ -485,7 +485,7 @@ private fun ChipOption(
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) AuroraCyan.copy(alpha = 0.2f) else Color.Transparent)
+            .background(if (selected) AuroraCyan.copy(alpha = 0.85f) else Color.Transparent)
             .border(
                 1.dp,
                 if (selected) AuroraCyan else NightOutline,
@@ -497,7 +497,7 @@ private fun ChipOption(
         Text(
             text = label,
             fontSize = 13.sp,
-            color = if (selected) AuroraCyan else InkSecondary,
+            color = if (selected) Color.White else InkPrimary,
             fontWeight = FontWeight.SemiBold
         )
     }
