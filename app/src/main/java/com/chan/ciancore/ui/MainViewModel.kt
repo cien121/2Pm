@@ -12,6 +12,7 @@ import com.chan.ciancore.data.IpChecker
 import com.chan.ciancore.data.Node
 import com.chan.ciancore.data.NodeDao
 import com.chan.ciancore.data.NodeLinkParser
+import com.chan.ciancore.data.NodeShortcutManager
 import com.chan.ciancore.data.SubscriptionManager
 import com.chan.ciancore.service.CianCoreVpnService
 import com.chan.ciancore.service.CianCoreVpnService.ConnectionState
