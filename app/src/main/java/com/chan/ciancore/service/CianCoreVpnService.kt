@@ -22,6 +22,7 @@ import com.chan.ciancore.core.xray.XrayCore
 import com.chan.ciancore.data.ChainPrefs.chainNodeId
 import com.chan.ciancore.data.DnsPrefs.directDns
 import com.chan.ciancore.data.DnsPrefs.fakeDns
+import com.chan.ciancore.data.DnsPrefs.ipv6Enabled
 import com.chan.ciancore.data.DnsPrefs.remoteDns
 import com.chan.ciancore.data.DnsPrefs.vpnAddress
 import com.chan.ciancore.data.DnsPrefs.vpnDns
@@ -121,6 +122,13 @@ class CianCoreVpnService : VpnService() {
             } catch (_: Throwable) {
                 builder.addAddress(VPN_ADDRESS, 32)
             }
+            // IPv6: assign a ULA address so v6 traffic enters the tunnel.
+            if (ipv6Enabled) {
+                try {
+                    builder.addAddress(VPN_ADDRESS_V6, 128)
+                } catch (_: Throwable) {
+                }
+            }
             // VPN interface DNS servers (configurable).
             vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 .forEach { dns ->
@@ -132,6 +140,12 @@ class CianCoreVpnService : VpnService() {
             builder
                 .addRoute("0.0.0.0", 0)
                 .addDisallowedApplication(packageName)
+            if (ipv6Enabled) {
+                try {
+                    builder.addRoute("::", 0)
+                } catch (_: Throwable) {
+                }
+            }
             // Per-app routing.
             applyPerAppRouting(builder)
             // Close any stale interface before establishing a new one.
@@ -286,6 +300,7 @@ class CianCoreVpnService : VpnService() {
         private const val NOTIF_ID = 1001
         private const val VPN_MTU = 1500
         private const val VPN_ADDRESS = "10.8.0.2"
+        private const val VPN_ADDRESS_V6 = "fd00:8:0:2::2"
 
         const val ACTION_CONNECT = "com.chan.ciancore.action.CONNECT"
         const val ACTION_DISCONNECT = "com.chan.ciancore.action.DISCONNECT"

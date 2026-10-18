@@ -21,6 +21,7 @@ object DnsPrefs {
     private const val KEY_BYPASS_LAN = "bypass_lan"
     private const val KEY_VPN_ADDRESS = "vpn_address"
     private const val KEY_VPN_MTU = "vpn_mtu"
+    private const val KEY_IPV6 = "ipv6_enabled"
 
     const val DEFAULT_TEST_URL = "https://www.gstatic.com/generate_204"
     const val DEFAULT_IP_INFO_URL = "https://api.ip.sb/geoip"
@@ -85,4 +86,9 @@ object DnsPrefs {
     var Context.vpnMtu: Int
         get() = prefs(this).getInt(KEY_VPN_MTU, 1500).coerceIn(1280, 9000)
         set(v) = prefs(this).edit { putInt(KEY_VPN_MTU, v.coerceIn(1280, 9000)) }
+
+    /** Enable IPv6 on the VPN interface. */
+    var Context.ipv6Enabled: Boolean
+        get() = prefs(this).getBoolean(KEY_IPV6, true)
+        set(v) = prefs(this).edit { putBoolean(KEY_IPV6, v) }
 }

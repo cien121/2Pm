@@ -58,9 +58,9 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
-    var ipv6 by remember { mutableStateOf(true) }
-    var autoConnect by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    var ipv6 by remember { mutableStateOf(com.chan.ciancore.data.DnsPrefs.run { context.ipv6Enabled }) }
+    var autoConnect by remember { mutableStateOf(false) }
     var geoStatus by remember { mutableStateOf<String?>(null) }
     var geoBusy by remember { mutableStateOf(false) }
     var geoProgress by remember { mutableStateOf<String?>(null) }
@@ -91,7 +91,10 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     title = "IPv6",
                     subtitle = "为 VPN 接口启用 IPv6",
                     checked = ipv6,
-                    onCheckedChange = { ipv6 = it }
+                    onCheckedChange = {
+                        ipv6 = it
+                        com.chan.ciancore.data.DnsPrefs.run { context.ipv6Enabled = it }
+                    }
                 )
                 SettingsToggle(
                     title = "开机自动连接",
