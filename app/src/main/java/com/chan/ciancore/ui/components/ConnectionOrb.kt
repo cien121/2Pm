@@ -64,6 +64,7 @@ fun ConnectionOrb(
             ConnectionState.CONNECTED -> 1f
             ConnectionState.CONNECTING -> 0.55f
             ConnectionState.IDLE -> 0.18f
+            ConnectionState.ERROR -> 0.3f
         },
         animationSpec = tween(600, easing = FastOutSlowInEasing),
         label = "glow"
@@ -203,8 +204,8 @@ fun ConnectionOrb(
                 )
             }
             Icon(
-                imageVector = if (state == ConnectionState.IDLE) Icons.Filled.Bolt else Icons.Filled.Close,
-                contentDescription = if (state == ConnectionState.IDLE) "连接" else "断开",
+                imageVector = if (state == ConnectionState.IDLE || state == ConnectionState.ERROR) Icons.Filled.Bolt else Icons.Filled.Close,
+                contentDescription = if (state == ConnectionState.IDLE || state == ConnectionState.ERROR) "连接" else "断开",
                 tint = if (state == ConnectionState.CONNECTED) Color.White else InkPrimary,
                 modifier = Modifier.size(56.dp)
             )

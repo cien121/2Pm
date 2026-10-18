@@ -1,5 +1,6 @@
 package com.chan.ciancore.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -19,44 +21,47 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.chan.ciancore.data.Node
 import com.chan.ciancore.service.CianCoreVpnService.ConnectionState
+import com.chan.ciancore.ui.MainViewModel
 import com.chan.ciancore.ui.components.AuroraBackground
 import com.chan.ciancore.ui.components.ConnectionOrb
 import com.chan.ciancore.ui.components.HudStats
 import com.chan.ciancore.ui.components.NodeDeck
-import com.chan.ciancore.ui.theme.AuroraCyan
 import com.chan.ciancore.ui.theme.InkPrimary
 import com.chan.ciancore.ui.theme.InkSecondary
+import com.chan.ciancore.ui.theme.SignalError
 import com.chan.ciancore.ui.theme.SignalUp
 import com.chan.ciancore.ui.theme.SignalWarn
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.delay
 
 /**
  * Home — the cockpit.
  *
  * Aurora sky, living connection orb in the center, HUD stats floating
  * beneath, and the node deck at the bottom. One tap on the orb is the
- * entire connection UX.
- *
- * NOTE (skeleton): state flows are placeholders; the ViewModel wiring
- * lands with the Xray-core integration.
+ * entire connection UX. State flows from [MainViewModel], which mirrors
+ * the real [CianCoreVpnService] tunnel state.
  */
 @Composable
 fun HomeScreen(
-    onToggleConnection: () -> Unit = {},
-    onSelectNode: (Node) -> Unit = {}
+    vm: MainViewModel,
+    requestVpnPermission: (Intent) -> Unit
 ) {
-    // --- Skeleton state (replace with ViewModel) ---
-    val connectionState: StateFlow<ConnectionState> = MutableStateFlow(ConnectionState.IDLE)
-    val nodes: StateFlow<List<Node>> = MutableStateFlow(emptyList())
-    val selectedId: StateFlow<Long?> = MutableStateFlow(null)
-    // ------------------------------------------------
+    val state by vm.connectionState.collectAsState()
+    val nodeList by vm.nodes.collectAsState()
+    val currentSelectedId by vm.selectedId.collectAsState()
+    val errorMsg by vm.connectionError.collectAsState()
+    val notice by vm.notice.collectAsState()
 
-    val state by connectionState.collectAsState()
-    val nodeList by nodes.collectAsState()
-    val currentSelectedId by selectedId.collectAsState()
+    val selectedNode = nodeList.firstOrNull { it.id == currentSelectedId }
+
+    // Auto-dismiss transient notices.
+    if (notice != null) {
+        LaunchedEffect(notice) {
+            delay(2600)
+            vm.consumeNotice()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -77,19 +82,19 @@ fun HomeScreen(
                 letterSpacing = 2.sp
             )
             Spacer(Modifier.height(4.dp))
-            StatusLine(state = state)
+            StatusLine(state = state, errorMsg = errorMsg, notice = notice)
             Spacer(Modifier.height(28.dp))
 
             // The orb
             ConnectionOrb(
                 state = state,
-                onToggle = onToggleConnection
+                onToggle = { vm.onOrbClick(requestVpnPermission) }
             )
             Spacer(Modifier.height(24.dp))
 
             // HUD stats
             HudStats(
-                latencyMs = -1,
+                latencyMs = selectedNode?.latencyMs ?: -1,
                 downBps = 0,
                 upBps = 0,
                 modifier = Modifier.padding(horizontal = 20.dp)
@@ -111,7 +116,7 @@ fun HomeScreen(
                 NodeDeck(
                     nodes = nodeList,
                     selectedId = currentSelectedId,
-                    onSelect = onSelectNode
+                    onSelect = { vm.selectNode(it) }
                 )
             }
         }
@@ -119,17 +124,24 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StatusLine(state: ConnectionState) {
-    val (text, color) = when (state) {
-        ConnectionState.CONNECTED -> "已连接 · 隧道开启" to SignalUp
-        ConnectionState.CONNECTING -> "正在建立隧道…" to SignalWarn
-        ConnectionState.IDLE -> "轻触核心开始连接" to InkSecondary
+private fun StatusLine(
+    state: ConnectionState,
+    errorMsg: String?,
+    notice: String?
+) {
+    val (text, color) = when {
+        notice != null -> notice to SignalWarn
+        state == ConnectionState.CONNECTED -> "已连接 · 隧道开启" to SignalUp
+        state == ConnectionState.CONNECTING -> "正在建立隧道…" to SignalWarn
+        state == ConnectionState.ERROR -> "连接失败：${errorMsg ?: "未知错误"}" to SignalError
+        else -> "轻触核心开始连接" to InkSecondary
     }
     Text(
         text = text,
         fontSize = 13.sp,
         color = color,
         textAlign = TextAlign.Center,
-        fontWeight = FontWeight.Medium
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(horizontal = 32.dp)
     )
 }

@@ -29,17 +29,21 @@ right engine per connection.
 
 ## Status
 
-**v1 skeleton** — project scaffolding only:
+**v0.2 — first working build**: the app connects for real.
 - ✅ Kotlin + Compose project (minSdk 26, targetSdk 34)
 - ✅ Aurora Night design system (theme, gradients, animations)
 - ✅ Immersive home: connection orb + HUD + node deck
 - ✅ Nodes grid, settings screens, core selector
-- ✅ VpnService skeleton wired to CoreRegistry
+- ✅ VpnService: TUN + foreground notification (Android 14 specialUse)
 - ✅ Room database (nodes, with per-node core selection)
 - ✅ CI: downloads/builds both AARs, builds debug APK
-- ⬜ Core start/stop wiring (config builders per engine)
-- ⬜ Node add/edit (link parsing), latency testing
-- ⬜ Traffic stats, routing settings
+- ✅ Node add: share-link parsing (vless/vmess/trojan/ss/hysteria2/tuic)
+- ✅ Xray core start/stop: per-protocol config builder
+  (vless/vmess/trojan/ss/hysteria2; tuic needs sing-box)
+- ✅ Connection state machine (idle/connecting/connected/error)
+  driving the orb
+- ⬜ Latency testing, traffic stats (HUD shows 0 for now)
+- ⬜ sing-box core start/stop, routing settings
 
 ## Build
 

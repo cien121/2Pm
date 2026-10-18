@@ -1,25 +1,33 @@
 package com.chan.ciancore.core.xray
 
 import android.content.Context
+import android.provider.Settings
+import android.util.Log
 import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.ProxyCore
 import com.chan.ciancore.core.TrafficStats
+import go.Seq
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.Libv2ray
+import java.io.File
 
 /**
  * Xray-core adapter over the official `libv2ray.aar`
  * (2dust/AndroidLibXrayLite).
  *
- * Verified API surface (v26.10.10):
- * - Libv2ray.initCoreEnv(context, userAgent)
- * - Libv2ray.newCoreController() -> CoreController
- * - CoreController.startLoop(configJson)
+ * API surface verified against the v26.10.10 AAR (javap on
+ * classes.jar) and 2dust/AndroidLibXrayLite Go source:
+ * - Libv2ray.initCoreEnv(assetPath, deviceId)
+ * - Libv2ray.newCoreController(handler) -> CoreController
+ * - Libv2ray.measureOutboundDelay(configJson, testUrl) -> Long
+ * - CoreController.startLoop(configJson, tunFd)
  * - CoreController.stopLoop()
- * - CoreController.measureDelay(configJson) -> Long (ms)
- * - CoreController.queryAllOutboundTrafficStats() -> LongArray [tx, rx]
+ * - CoreController.measureDelay(url) -> Long (via the RUNNING core)
+ * - CoreController.queryAllOutboundTrafficStats() -> String
+ *   "tag,direction,value;..." (query-AND-RESET semantics)
  * - CoreController.getIsRunning() -> Boolean
  */
 class XrayCore(private val appContext: Context) : ProxyCore {
@@ -33,27 +41,52 @@ class XrayCore(private val appContext: Context) : ProxyCore {
     @Volatile
     private var initialized = false
 
+    /** TUN fd handed to startLoop; set by the VPN service before start(). */
+    @Volatile
+    private var tunFd: Int = 0
+
+    private val statsLock = Any()
+    private var txTotal: Long = 0
+    private var rxTotal: Long = 0
+
+    fun setTunFd(fd: Int) {
+        tunFd = fd
+    }
+
     override fun initialize(context: Context) {
         if (initialized) return
-        // Package name as user agent, matching upstream convention.
-        Libv2ray.initCoreEnv(context.applicationContext, "com.chan.ciancore")
-        initialized = true
+        synchronized(this) {
+            if (initialized) return
+            Seq.setContext(context.applicationContext)
+            val assetDir = File(context.filesDir, "xray").apply { mkdirs() }
+            val deviceId = Settings.Secure.getString(
+                context.contentResolver, Settings.Secure.ANDROID_ID
+            ).orEmpty()
+            Libv2ray.initCoreEnv(assetDir.absolutePath, deviceId)
+            initialized = true
+        }
     }
 
     override fun start(configJson: String): Result<Unit> = runCatching {
         initialize(appContext)
         stop() // ensure clean state
-        val c = Libv2ray.newCoreController()
-        // startLoop throws / returns error string on failure depending on build;
-        // treat any exception as failure.
-        c.startLoop(configJson)
+        val c = Libv2ray.newCoreController(CoreCallback())
+        c.startLoop(configJson, tunFd)
+        if (c.getIsRunning() != true) {
+            throw IllegalStateException("核心启动后未能进入运行状态")
+        }
         controller = c
+        synchronized(statsLock) {
+            txTotal = 0
+            rxTotal = 0
+        }
     }
 
     override fun stop() {
         try {
             controller?.stopLoop()
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            Log.w(TAG, "stopLoop failed", t)
         } finally {
             controller = null
         }
@@ -70,33 +103,62 @@ class XrayCore(private val appContext: Context) : ProxyCore {
         withContext(Dispatchers.IO) {
             try {
                 initialize(appContext)
-                // measureDelay spins up an ephemeral instance; does not
-                // disturb the running controller.
-                val c = Libv2ray.newCoreController()
-                try {
-                    c.measureDelay(configJson)
-                } finally {
-                    try {
-                        c.stopLoop()
-                    } catch (_: Throwable) {
-                    }
-                }
-            } catch (_: Throwable) {
+                // Ephemeral instance; does not disturb the running controller.
+                Libv2ray.measureOutboundDelay(configJson, DELAY_TEST_URL)
+            } catch (t: Throwable) {
+                Log.w(TAG, "measureLatency failed", t)
                 -1L
             }
         }
 
     override fun queryTrafficStats(): TrafficStats {
+        val c = controller ?: return TrafficStats(txTotal, rxTotal)
         return try {
-            // Returns LongArray [txBytes, rxBytes] per upstream convention.
-            val arr = controller?.queryAllOutboundTrafficStats()
-            if (arr != null && arr.size >= 2) {
-                TrafficStats(txBytes = arr[0], rxBytes = arr[1])
-            } else {
-                TrafficStats()
+            // Go side does query-and-reset; accumulate into session totals.
+            val payload = c.queryAllOutboundTrafficStats().orEmpty()
+            var tx = 0L
+            var rx = 0L
+            payload.split(';').forEach { entry ->
+                if (entry.isBlank()) return@forEach
+                val parts = entry.split(',', limit = 3)
+                if (parts.size != 3) return@forEach
+                if (parts[0] != "proxy") return@forEach
+                val value = parts[2].toLongOrNull() ?: return@forEach
+                when (parts[1]) {
+                    "uplink" -> tx += value
+                    "downlink" -> rx += value
+                }
             }
-        } catch (_: Throwable) {
-            TrafficStats()
+            synchronized(statsLock) {
+                txTotal += tx
+                rxTotal += rx
+                TrafficStats(txTotal, rxTotal)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "queryTrafficStats failed", t)
+            synchronized(statsLock) { TrafficStats(txTotal, rxTotal) }
         }
+    }
+
+    private class CoreCallback : CoreCallbackHandler {
+        override fun startup(): Long {
+            Log.i(TAG, "core startup")
+            return 0
+        }
+
+        override fun shutdown(): Long {
+            Log.i(TAG, "core shutdown")
+            return 0
+        }
+
+        override fun onEmitStatus(l: Long, s: String?): Long {
+            Log.i(TAG, "core status: $s")
+            return 0
+        }
+    }
+
+    companion object {
+        private const val TAG = "XrayCore"
+        const val DELAY_TEST_URL = "https://www.gstatic.com/generate_204"
     }
 }

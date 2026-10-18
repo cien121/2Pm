@@ -1,5 +1,6 @@
 package com.chan.ciancore.ui.navigation
 
+import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -41,6 +42,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.chan.ciancore.ui.MainViewModel
 import com.chan.ciancore.ui.screens.HomeScreen
 import com.chan.ciancore.ui.screens.NodesScreen
 import com.chan.ciancore.ui.screens.SettingsScreen
@@ -66,7 +68,10 @@ private val TABS = listOf(Dest.Home, Dest.Nodes, Dest.Settings)
  * frosted capsule, glowing active orb.
  */
 @Composable
-fun CianCoreNavGraph() {
+fun CianCoreNavGraph(
+    vm: MainViewModel,
+    requestVpnPermission: (Intent) -> Unit
+) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
@@ -113,8 +118,8 @@ fun CianCoreNavGraph() {
             startDestination = Dest.Home.route,
             modifier = Modifier.fillMaxSize()
         ) {
-            composable(Dest.Home.route) { HomeScreen() }
-            composable(Dest.Nodes.route) { NodesScreen() }
+            composable(Dest.Home.route) { HomeScreen(vm, requestVpnPermission) }
+            composable(Dest.Nodes.route) { NodesScreen(vm) }
             composable(Dest.Settings.route) { SettingsScreen() }
         }
     }

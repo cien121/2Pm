@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.chan.ciancore.core.CoreType
 
-@Database(entities = [Node::class], version = 2, exportSchema = false)
+@Database(entities = [Node::class], version = 3, exportSchema = false)
 @TypeConverters(CoreTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun nodeDao(): NodeDao

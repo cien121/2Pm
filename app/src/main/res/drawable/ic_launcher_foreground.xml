@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Aurora Night orb -->
+    <path
+        android:pathData="M54,22m-32,0a32,32 0 1,0 64,0a32,32 0 1,0 -64,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="42"
+                android:centerX="54"
+                android:centerY="54">
+                <item android:offset="0" android:color="#FF00E5CC" />
+                <item android:offset="0.55" android:color="#FF7B61FF" />
+                <item android:offset="1" android:color="#00FF5CA8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#FF060A12"
+        android:pathData="M54,34m-20,0a20,20 0 1,0 40,0a20,20 0 1,0 -40,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M57,42L47,57h6.4L52,66l10,-13h-6.4L57,42z" />
+</vector>

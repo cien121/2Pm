@@ -61,7 +61,13 @@ jobs:
 
       - name: Build debug APK (arm64-v8a)
         run: |
-          ./gradlew assembleDebug --stacktrace
+          # No gradle wrapper in the repo (binary jar can't be committed
+          # via the file-push flow), so install Gradle directly.
+          curl -fSL -o /tmp/gradle.zip \
+            https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          export PATH=/tmp/gradle-8.7/bin:$PATH
+          gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

@@ -1,66 +1,72 @@
 package com.chan.ciancore.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chan.ciancore.data.Node
+import com.chan.ciancore.ui.MainViewModel
 import com.chan.ciancore.ui.components.AuroraBackground
 import com.chan.ciancore.ui.components.LatencyBar
 import com.chan.ciancore.ui.theme.AuroraCyan
 import com.chan.ciancore.ui.theme.AuroraGradient
 import com.chan.ciancore.ui.theme.InkPrimary
 import com.chan.ciancore.ui.theme.InkSecondary
-import com.chan.ciancore.ui.theme.NightSurface
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
 import com.chan.ciancore.ui.theme.NightOutline
+import com.chan.ciancore.ui.theme.NightSurface
+import com.chan.ciancore.ui.theme.SignalError
 import com.chan.ciancore.ui.theme.latencyColor
 
 /**
  * Nodes — signal grid.
  *
  * Two-column mosaic of node tiles with latency glow instead of a
- * spreadsheet. Skeleton: add/select/delete wiring comes next.
+ * spreadsheet. Tap selects, long-press deletes, FAB pastes a share link.
  */
 @Composable
-fun NodesScreen(
-    onAddNode: () -> Unit = {},
-    onSelectNode: (Node) -> Unit = {},
-    onDeleteNode: (Node) -> Unit = {}
-) {
-    val nodes: StateFlow<List<Node>> = MutableStateFlow(emptyList())
-    val nodeList by nodes.collectAsState()
+fun NodesScreen(vm: MainViewModel) {
+    val nodeList by vm.nodes.collectAsState()
+    var showAdd by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<Node?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -78,7 +84,7 @@ fun NodesScreen(
                 modifier = Modifier.padding(horizontal = 24.dp)
             )
             Text(
-                text = "${nodeList.size} 个信号源",
+                text = "${nodeList.size} 个信号源 · 长按删除",
                 fontSize = 13.sp,
                 color = InkSecondary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -99,7 +105,8 @@ fun NodesScreen(
                     items(nodeList, key = { it.id }) { node ->
                         NodeTile(
                             node = node,
-                            onClick = { onSelectNode(node) }
+                            onClick = { vm.selectNode(node) },
+                            onLongClick = { pendingDelete = node }
                         )
                     }
                 }
@@ -107,7 +114,7 @@ fun NodesScreen(
         }
 
         FloatingActionButton(
-            onClick = onAddNode,
+            onClick = { showAdd = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 24.dp, bottom = 112.dp),
@@ -117,17 +124,54 @@ fun NodesScreen(
             Icon(Icons.Filled.Add, contentDescription = "添加节点")
         }
     }
+
+    if (showAdd) {
+        AddNodeDialog(
+            onDismiss = { showAdd = false },
+            onAdd = { link, onResult ->
+                vm.addNodeFromLink(link) { err ->
+                    onResult(err)
+                    if (err == null) showAdd = false
+                }
+            }
+        )
+    }
+
+    pendingDelete?.let { node ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除节点", color = InkPrimary) },
+            text = { Text("确定删除「${node.name}」吗？", color = InkSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteNode(node)
+                    pendingDelete = null
+                }) { Text("删除", color = SignalError) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("取消", color = InkSecondary)
+                }
+            },
+            containerColor = NightSurface
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NodeTile(node: Node, onClick: () -> Unit) {
+private fun NodeTile(
+    node: Node,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     val accent = latencyColor(node.latencyMs)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(NightSurface.copy(alpha = 0.85f))
             .border(1.dp, NightOutline, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(14.dp)
     ) {
         Column {
@@ -183,6 +227,59 @@ private fun NodeTile(node: Node, onClick: () -> Unit) {
             LatencyBar(latencyMs = node.latencyMs)
         }
     }
+}
+
+@Composable
+private fun AddNodeDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, (String?) -> Unit) -> Unit
+) {
+    var link by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("添加节点", color = InkPrimary) },
+        text = {
+            Column {
+                Text(
+                    text = "粘贴分享链接（vless / vmess / trojan / ss / hysteria2 / tuic）",
+                    fontSize = 12.sp,
+                    color = InkSecondary
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = link,
+                    onValueChange = { link = it; error = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("vless://…", color = InkSecondary) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    minLines = 3
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = error!!, fontSize = 12.sp, color = SignalError)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy,
+                onClick = {
+                    busy = true
+                    onAdd(link) { err ->
+                        busy = false
+                        error = err
+                    }
+                }
+            ) { Text("添加", color = AuroraCyan) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }
+        },
+        containerColor = NightSurface
+    )
 }
 
 @Composable
