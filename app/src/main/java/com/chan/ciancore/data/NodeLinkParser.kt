@@ -398,7 +398,7 @@ object NodeLinkParser {
             protocol = "anytls",
             host = uri.host!!,
             port = uri.port,
-password=<redacted>
+            password = password,
             security = "tls",
             sni = q("sni").orEmpty(),
             insecure = insecure,
