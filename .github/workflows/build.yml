@@ -67,6 +67,22 @@ jobs:
             -o /tmp/libbox.aar \
             ./experimental/libbox
           cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
+          # Both AARs embed the gomobile Java runtime (go.Seq, go.Universe…),
+          # which fails checkDebugDuplicateClasses. Strip it from OUR
+          # libbox.aar and keep the official libv2ray.aar's copy —
+          # the bridge API is stable across both builds.
+          cd /tmp
+          rm -rf libbox_fix && mkdir libbox_fix && cd libbox_fix
+          unzip -q /tmp/libbox.aar
+          mkdir -p classes && cd classes
+          unzip -q ../classes.jar
+          rm -rf go
+          rm ../classes.jar
+          zip -q -r ../classes.jar .
+          cd ..
+          rm -f /tmp/libbox.aar
+          zip -q -r /tmp/libbox.aar .
+          cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
           ls -lh $GITHUB_WORKSPACE/app/libs/
 
       - name: Build debug APK (arm64-v8a)
