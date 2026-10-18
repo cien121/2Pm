@@ -18,6 +18,11 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Only arm64-v8a is shipped (matches the device fleet)
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -52,10 +57,7 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-    // Only arm64-v8a is shipped (matches the device fleet)
-    ndk {
-        abiFilters += listOf("arm64-v8a")
-    }
+    // (ndk abiFilters live inside defaultConfig)
 }
 
 dependencies {
