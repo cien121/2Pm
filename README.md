@@ -1,4 +1,4 @@
-# 2Pm
+# Weave
 
 A fresh-start Android proxy client — Kotlin, Jetpack Compose, single-core (Xray).
 
