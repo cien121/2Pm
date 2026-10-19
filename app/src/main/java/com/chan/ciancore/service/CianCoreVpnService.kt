@@ -212,9 +212,10 @@ class CianCoreVpnService : VpnService() {
         val tunAddr = try { vpnAddress } catch (_: Throwable) { "10.8.0.2" }
         val configJson = com.chan.ciancore.core.singbox.SingBoxConfigBuilder.build(node, tunAddr)
 
-        // Pre-create TUN BEFORE starting sing-box (avoid blocking Go callback thread)
-        // openTun() will just return the pre-created fd.
-        val preCreatedFd: Int = try {
+        // PlatformInterface: libbox calls openTun() when TUN inbound starts.
+        // Build TUN via VpnService.Builder here and return the detached fd.
+        // Note: must NOT pre-create before sing-box start; Go dups the fd.
+        val platform = com.chan.ciancore.core.singbox.SingBoxPlatformInterface { _ ->
             val builder = Builder()
                 .setSession("2Pm")
                 .setMtu(vpnMtu)
@@ -254,13 +255,6 @@ class CianCoreVpnService : VpnService() {
                 ?: throw IllegalStateException("VPN 接口创建失败")
             tunFd = parcelFd
             parcelFd.detachFd()
-        } catch (t: Throwable) {
-            throw IllegalStateException("TUN 创建失败: ${t.message}")
-        }
-
-        // PlatformInterface: openTun just returns the pre-created fd (non-blocking)
-        val platform = com.chan.ciancore.core.singbox.SingBoxPlatformInterface { _ ->
-            preCreatedFd
         }
 
         val core = com.chan.ciancore.core.singbox.SingBoxCore(applicationContext, platform)
