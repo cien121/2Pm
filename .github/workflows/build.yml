@@ -42,48 +42,6 @@ jobs:
             https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.10.10/libv2ray.aar
           ls -lh app/libs/libv2ray.aar
 
-      - name: Build sing-box libbox AAR from official source
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          export PATH=$PATH:$(go env GOPATH)/bin
-          gomobile init
-          git clone --depth 1 --branch v1.14.3 \
-            https://github.com/SagerNet/sing-box.git /tmp/sing-box
-          cd /tmp/sing-box
-          go get -tool golang.org/x/mobile/cmd/gobind
-          go mod tidy
-          gomobile bind \
-            -androidapi 24 \
-            -trimpath \
-            -ldflags='-s -w -buildid= -checklinkname=0' \
-            -o /tmp/libbox.aar \
-            ./experimental/libbox
-          # Fix dual-Go-library conflict:
-          # 1. Rename libgojni.so -> libboxjni.so (avoid mergeDebugNativeLibs conflict
-          #    with libv2ray.aar's libgojni.so)
-          # 2. Strip go/ Java classes from classes.jar (avoid dex duplicate with
-          #    libv2ray.aar's copy; libbox classes use libv2ray's go.Seq at runtime)
-          # 3. App loads libboxjni.so via System.loadLibrary("boxjni") before use
-          cd /tmp
-          rm -rf libbox_fix && mkdir libbox_fix && cd libbox_fix
-          unzip -q /tmp/libbox.aar
-          for abi in jni/*/; do
-            if [ -f "${abi}libgojni.so" ]; then
-              mv "${abi}libgojni.so" "${abi}libboxjni.so"
-            fi
-          done
-          mkdir -p classes && cd classes
-          unzip -q ../classes.jar
-          rm -rf go
-          rm ../classes.jar
-          zip -q -r ../classes.jar .
-          cd ..
-          rm -f /tmp/libbox.aar
-          zip -q -r /tmp/libbox.aar .
-          cp /tmp/libbox.aar $GITHUB_WORKSPACE/app/libs/libbox.aar
-          ls -lh $GITHUB_WORKSPACE/app/libs/
-          unzip -l $GITHUB_WORKSPACE/app/libs/libbox.aar | grep -E "so|go/" | head -10
-
       - name: Restore fixed debug keystore
         run: |
           # Every build must carry the same signature, or the APK won't

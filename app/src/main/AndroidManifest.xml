@@ -48,13 +48,6 @@
                 android:value="vpn" />
         </service>
 
-        <!-- sing-box Go runtime isolated in :singbox process (avoid Go runtime
-             conflict with Xray's libgojni.so in main process) -->
-        <service
-            android:name=".service.SingBoxHelperService"
-            android:exported="false"
-            android:process=":singbox" />
-
         <service
             android:name=".service.CianCoreTileService"
             android:exported="true"

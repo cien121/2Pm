@@ -414,9 +414,6 @@ private fun AddNodeDialog(
         "socks" to "SOCKS",
         "http" to "HTTP",
         "hysteria2" to "Hysteria2",
-        "tuic" to "TUIC",
-        "wireguard" to "WireGuard",
-        "anytls" to "AnyTLS",
         "chain" to "⛓️ 链式代理"
     )
 
@@ -664,18 +661,8 @@ private fun EditNodeDialog(
     val isStream = proto == "vless" || proto == "vmess" || proto == "trojan"
     val showTls = security == "tls" || proto == "trojan" || isHy2
     val showReality = security == "reality"
-    // Core selection rules: xhttp must use Xray; hy2 can choose; others default Xray.
-    val isXhttp = network == "xhttp"
-    val coreLocked = isXhttp
-    val coreOptions = if (isHy2) {
-        listOf(com.chan.ciancore.core.CoreType.XRAY, com.chan.ciancore.core.CoreType.SING_BOX)
-    } else {
-        listOf(com.chan.ciancore.core.CoreType.XRAY)
-    }
-    // Force Xray for xhttp
-    if (isXhttp && coreType != com.chan.ciancore.core.CoreType.XRAY) {
-        coreType = com.chan.ciancore.core.CoreType.XRAY
-    }
+    // Single-core (Xray only); sing-box removed.
+    val coreOptions = listOf(com.chan.ciancore.core.CoreType.XRAY)
 
     AlertDialog(
         onDismissRequest = onDismiss,

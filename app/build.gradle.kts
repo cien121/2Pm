@@ -65,7 +65,6 @@ android {
     }
     buildFeatures {
         compose = true
-        aidl = true
     }
     packaging {
         resources {
@@ -79,10 +78,6 @@ dependencies {
     // Xray-core AAR (official build from 2dust/AndroidLibXrayLite).
     // CI downloads it into app/libs/ before building; see .github/workflows/build.yml
     implementation(files("libs/libv2ray.aar"))
-    // sing-box AAR (built from official source in CI).
-    // The .so is renamed to libboxjni.so and go/ classes are stripped
-    // to avoid conflicts with libv2ray.aar. See workflow for details.
-    implementation(files("libs/libbox.aar"))
 
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)

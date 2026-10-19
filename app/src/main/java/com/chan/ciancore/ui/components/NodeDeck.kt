@@ -182,9 +182,10 @@ private fun ProtocolBadge(protocol: String) {
 /** Tiny core-engine badge: X = Xray, S = sing-box. */
 @Composable
 fun CoreBadge(coreType: CoreType, modifier: Modifier = Modifier) {
+    // Single-core (Xray only) now; sing-box removed.
     val (label, color) = when (coreType) {
         CoreType.XRAY -> "X" to AuroraCyan
-        CoreType.SING_BOX -> "S" to AuroraMagenta
+        CoreType.SING_BOX -> "–" to androidx.compose.ui.graphics.Color.Gray
     }
     Box(
         modifier = modifier

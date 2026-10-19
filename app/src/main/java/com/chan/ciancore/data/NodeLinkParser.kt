@@ -355,6 +355,7 @@ object NodeLinkParser {
     // ── tuic ────────────────────────────────────────────────────
 
     private fun parseTuic(link: String): Node {
+        throw IllegalArgumentException("TUIC 协议暂不支持（仅 Xray 内核）")
         val uri = Uri.parse(link)
         val userInfo = decode(uri.encodedUserInfo.orEmpty())
         val uuid = userInfo.substringBefore(":")
@@ -385,6 +386,7 @@ object NodeLinkParser {
     }
 
     private fun parseAnytls(link: String): Node {
+        throw IllegalArgumentException("AnyTLS 协议暂不支持（仅 Xray 内核）")
         val uri = Uri.parse(link)
         val password = decode(uri.encodedUserInfo.orEmpty())
         require(password.isNotBlank()) { "anytls 链接缺少密码（password@...）" }
@@ -407,6 +409,7 @@ object NodeLinkParser {
     }
 
     private fun parseWireguard(link: String): Node {
+        throw IllegalArgumentException("WireGuard 协议暂不支持（仅 Xray 内核）")
         val uri = Uri.parse(link)
         val privateKey = decode(uri.encodedUserInfo.orEmpty())
         require(privateKey.isNotBlank()) { "wireguard 链接缺少私钥（privateKey@...）" }
