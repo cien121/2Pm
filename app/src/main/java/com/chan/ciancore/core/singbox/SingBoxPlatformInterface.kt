@@ -18,7 +18,13 @@ class SingBoxPlatformInterface(
 
     override fun openTun(options: TunOptions): Int {
         Log.i(TAG, "libbox openTun callback")
-        return tunBuilder(options)
+        return try {
+            tunBuilder(options)
+        } catch (t: Throwable) {
+            Log.e(TAG, "openTun failed", t)
+            // Return -1 to signal failure to Go side instead of crashing
+            -1
+        }
     }
 
     // ── Conservative defaults for the rest ──
