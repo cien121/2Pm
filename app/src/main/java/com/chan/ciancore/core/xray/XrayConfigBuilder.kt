@@ -29,7 +29,7 @@ object XrayConfigBuilder {
         /**
          * Chain proxy: when set (and different from the main node),
          * the main outbound dials through this node's outbound
-         * (Xray `proxySettings.tag = "front"`).
+         * (Xray `streamSettings.sockopt.dialerProxy = "front"`).
          */
         val chainNode: Node? = null,
         // Mux (multiplexing)
@@ -66,12 +66,18 @@ object XrayConfigBuilder {
         val outbounds = JSONArray().put(mainOutbound)
         // Chain proxy: main outbound dials through the front node.
         // A broken chain node must never break the main connection.
+        // NOTE: Xray removed outbound-level "proxySettings"; use
+        // "streamSettings.sockopt.dialerProxy" instead.
         val chain = options.chainNode
         if (chain != null && chain.id != 0L && chain.id != node.id) {
             val frontOutbound = runCatching { buildOutbound(chain, "front") }.getOrNull()
             if (frontOutbound != null) {
                 outbounds.put(frontOutbound)
-                mainOutbound.put("proxySettings", JSONObject().put("tag", "front"))
+                val streamSettings = mainOutbound.optJSONObject("streamSettings")
+                    ?: JSONObject().also { mainOutbound.put("streamSettings", it) }
+                val sockopt = streamSettings.optJSONObject("sockopt")
+                    ?: JSONObject().also { streamSettings.put("sockopt", it) }
+                sockopt.put("dialerProxy", "front")
             }
         }
         outbounds.put(directOutbound()).put(blockOutbound())
