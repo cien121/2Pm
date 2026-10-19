@@ -267,11 +267,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_testingIds.value.contains(node.id)) return
         _testingIds.value = _testingIds.value + node.id
         viewModelScope.launch {
-            val ms = LatencyTester.realTest(getApplication(), node)
-            // Fall back to TCP ping if the real test fails outright.
-            val final = if (ms < 0) LatencyTester.tcpPing(node.host, node.port) else ms
-            withContext(Dispatchers.IO) { dao.updateLatency(node.id, final) }
-            _testingIds.value = _testingIds.value - node.id
+            try {
+                val ms = LatencyTester.realTest(getApplication(), node)
+                // Fall back to TCP ping if the real test fails outright.
+                val final = if (ms < 0) {
+                    try {
+                        LatencyTester.tcpPing(node.host, node.port)
+                    } catch (_: Throwable) {
+                        -1L
+                    }
+                } else ms
+                withContext(Dispatchers.IO) { dao.updateLatency(node.id, final) }
+            } catch (_: Throwable) {
+                // Never crash the app from a latency test
+            } finally {
+                _testingIds.value = _testingIds.value - node.id
+            }
         }
     }
 
