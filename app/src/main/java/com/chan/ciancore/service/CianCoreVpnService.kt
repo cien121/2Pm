@@ -113,9 +113,17 @@ class CianCoreVpnService : VpnService() {
                 CoreType.SING_BOX -> connectSingBox(node)
             }
 
-            _activeNodeId.value = node.id
-            _state.value = ConnectionState.CONNECTED
-            goForeground("已连接 · ${node.name}", node.name)
+            try {
+                _activeNodeId.value = node.id
+                _state.value = ConnectionState.CONNECTED
+            } catch (_: Throwable) {
+                // StateFlow update should not crash the service
+            }
+            try {
+                goForeground("已连接 · ${node.name}", node.name)
+            } catch (_: Throwable) {
+                // Notification update should not crash the service
+            }
             Log.i(TAG, "connected: ${node.name}")
         } catch (t: Throwable) {
             val msg = t.message?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName
