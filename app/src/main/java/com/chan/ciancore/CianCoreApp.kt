@@ -23,8 +23,8 @@ class CianCoreApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // Ensure geo dat files are in the Xray asset dir.
-        appScope.launch { GeoManager.ensureBundled(this@CianCoreApp) }
+        // Ensure geo dat files are available (download if missing).
+        appScope.launch { GeoManager.ensureAvailable(this@CianCoreApp) }
     }
 
     companion object {

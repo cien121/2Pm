@@ -40,6 +40,19 @@ object GeoManager {
         copyAsset(context, "geosite.dat", geositeFile(context))
     }
 
+    /**
+     * Ensure geo files are available. Downloads them if missing.
+     * Called on app startup; runs in background.
+     */
+    suspend fun ensureAvailable(context: Context): Unit = withContext(Dispatchers.IO) {
+        if (isReady(context)) return@withContext
+        // Try bundled assets first (if present)
+        ensureBundled(context)
+        if (isReady(context)) return@withContext
+        // Download from mirrors
+        update(context)
+    }
+
     private fun copyAsset(context: Context, assetName: String, dest: File) {
         if (dest.exists() && dest.length() > 0) return
         try {

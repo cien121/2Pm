@@ -203,7 +203,11 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
             }
 
             SettingsGroup(title = "关于") {
-                SettingsRow(title = "版本", value = "0.3.0", onClick = {})
+                SettingsRow(
+                    title = "版本",
+                    value = com.chan.ciancore.BuildConfig.VERSION_NAME,
+                    onClick = {}
+                )
                 SettingsRow(title = "开源许可", value = "GPL-3.0", onClick = {})
             }
         }

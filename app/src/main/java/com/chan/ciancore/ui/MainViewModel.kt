@@ -54,6 +54,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _egressIp = MutableStateFlow<IpChecker.IpInfo?>(null)
     val egressIp: StateFlow<IpChecker.IpInfo?> = _egressIp.asStateFlow()
 
+    /** Refresh egress IP. Protocol-aware: hysteria2/socks prefer v4, others v6. */
+    private fun refreshEgress() {
+        viewModelScope.launch {
+            val nodeId = activeNodeId.value
+            val preferV6 = withContext(Dispatchers.IO) {
+                val node = nodeId?.let { runCatching { dao.getById(it) }.getOrNull() }
+                when (node?.protocol?.lowercase()) {
+                    "hysteria2", "socks" -> false
+                    "proxychain" -> {
+                        // For chain, use first member's protocol
+                        val ids = getChainMemberIds(node)
+                        val first = ids.firstOrNull()?.let { runCatching { dao.getById(it) }.getOrNull() }
+                        when (first?.protocol?.lowercase()) {
+                            "hysteria2", "socks" -> false
+                            else -> true
+                        }
+                    }
+                    else -> true
+                }
+            }
+            _egressIp.value = IpChecker.check(getApplication(), preferV6)
+        }
+    }
+
+    /** Manual refresh triggered by tapping the egress IP display. */
+    fun refreshEgressManually() {
+        if (connectionState.value == ConnectionState.CONNECTED) {
+            _egressIp.value = null // show "检测中…"
+            refreshEgress()
+        }
+    }
+
     /** Live traffic speed in bytes/sec, polled while connected. */
     data class TrafficSpeed(val downBps: Long = 0, val upBps: Long = 0)
     private val _trafficSpeed = MutableStateFlow(TrafficSpeed())
@@ -77,15 +109,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             connectionState.collect { state ->
                 if (state == ConnectionState.CONNECTED) {
-                    val nodeId = activeNodeId.value
-                    val preferV6 = withContext(Dispatchers.IO) {
-                        val node = nodeId?.let { runCatching { dao.getById(it) }.getOrNull() }
-                        when (node?.protocol?.lowercase()) {
-                            "hysteria2", "socks" -> false
-                            else -> true
-                        }
-                    }
-                    _egressIp.value = IpChecker.check(getApplication(), preferV6)
+                    refreshEgress()
                 } else if (state == ConnectionState.IDLE) {
                     _egressIp.value = null
                 }

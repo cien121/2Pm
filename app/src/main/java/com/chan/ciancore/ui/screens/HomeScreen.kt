@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -88,20 +89,34 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(4.dp))
             StatusLine(state = state, errorMsg = errorMsg, notice = notice)
-            // Egress IP, auto-detected v4/v6.
+            // Egress IP, auto-detected v4/v6. Tap to refresh manually.
             if (state == ConnectionState.CONNECTED) {
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = if (egressIp != null) {
-                        "出口 ${egressIp!!.ip} · ${if (egressIp!!.isV6) "IPv6" else "IPv4"}"
-                    } else {
-                        "出口检测中…"
-                    },
-                    fontSize = 12.sp,
-                    color = InkSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(onClick = { vm.refreshEgressManually() })
+                        .padding(horizontal = 32.dp)
+                ) {
+                    Text(
+                        text = if (egressIp != null) {
+                            "出口 ${egressIp!!.ip} · ${if (egressIp!!.isV6) "IPv6" else "IPv4"}"
+                        } else {
+                            "出口检测中…"
+                        },
+                        fontSize = 12.sp,
+                        color = InkSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "🔄",
+                        fontSize = 12.sp,
+                        color = InkSecondary
+                    )
+                }
             }
             Spacer(Modifier.height(28.dp))
 
