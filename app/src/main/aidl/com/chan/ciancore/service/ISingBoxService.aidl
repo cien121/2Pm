@@ -1,6 +1,7 @@
 package com.chan.ciancore.service;
 
 import android.os.ParcelFileDescriptor;
+import com.chan.ciancore.service.ISingBoxCallback;
 
 /**
  * AIDL for sing-box running in :singbox process.

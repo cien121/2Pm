@@ -31,7 +31,15 @@ class CianCoreApp : Application() {
 
     private fun isSingBoxProcess(): Boolean {
         return try {
-            val processName = android.app.ActivityThread.currentProcessName()
+            // API 28+: Application.getProcessName()
+            val processName = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                Application.getProcessName()
+            } else {
+                // Fallback: read from ActivityManager
+                val am = getSystemService(android.app.ActivityManager::class.java)
+                val pid = android.os.Process.myPid()
+                am?.runningAppProcesses?.find { it.pid == pid }?.processName
+            }
             processName?.endsWith(":singbox") == true
         } catch (_: Throwable) {
             false
