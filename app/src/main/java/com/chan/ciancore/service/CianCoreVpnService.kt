@@ -213,71 +213,57 @@ class CianCoreVpnService : VpnService() {
         val configJson = com.chan.ciancore.core.singbox.SingBoxConfigBuilder.build(node, tunAddr)
 
         // PlatformInterface: libbox calls openTun() when TUN inbound starts.
-        // Build TUN via VpnService.Builder here and return the detached fd.
-        // Note: establish() must run on a thread with Looper (main thread)
-        // because Go callback threads can't do Binder IPC reliably.
-        val platform = com.chan.ciancore.core.singbox.SingBoxPlatformInterface { _ ->
-            val latch = java.util.concurrent.CountDownLatch(1)
-            var fdResult: Int = -1
-            var error: Throwable? = null
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
+        // Build TUN via VpnService.Builder directly in callback thread (safe per SFA).
+        // MUST call protect() on outbound sockets via autoDetectInterfaceControl,
+        // otherwise proxy's own connections loop back into TUN.
+        val platform = com.chan.ciancore.core.singbox.SingBoxPlatformInterface(
+            tunBuilder = { tunOptions ->
+                val builder = Builder()
+                    .setSession("2Pm")
+                    .setMtu(vpnMtu)
                 try {
-                    val builder = Builder()
-                        .setSession("2Pm")
-                        .setMtu(vpnMtu)
+                    builder.addAddress(vpnAddress, 32)
+                } catch (_: Throwable) {
+                    builder.addAddress(VPN_ADDRESS, 32)
+                }
+                if (ipv6Enabled) {
                     try {
-                        builder.addAddress(vpnAddress, 32)
+                        builder.addAddress(VPN_ADDRESS_V6, 128)
                     } catch (_: Throwable) {
-                        builder.addAddress(VPN_ADDRESS, 32)
                     }
-                    if (ipv6Enabled) {
+                }
+                vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    .forEach { dns ->
                         try {
-                            builder.addAddress(VPN_ADDRESS_V6, 128)
+                            builder.addDnsServer(dns)
                         } catch (_: Throwable) {
                         }
                     }
-                    vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                        .forEach { dns ->
-                            try {
-                                builder.addDnsServer(dns)
-                            } catch (_: Throwable) {
-                            }
-                        }
-                    builder
-                        .addRoute("0.0.0.0", 0)
-                        .addDisallowedApplication(packageName)
-                    if (ipv6Enabled) {
-                        try {
-                            builder.addRoute("::", 0)
-                        } catch (_: Throwable) {
-                        }
-                    }
-                    applyPerAppRouting(builder)
+                builder
+                    .addRoute("0.0.0.0", 0)
+                    .addDisallowedApplication(packageName)
+                if (ipv6Enabled) {
                     try {
-                        tunFd?.close()
+                        builder.addRoute("::", 0)
                     } catch (_: Throwable) {
                     }
-                    val parcelFd = builder.establish()
-                        ?: throw IllegalStateException("VPN 接口创建失败")
-                    tunFd = parcelFd
-                    fdResult = parcelFd.detachFd()
-                } catch (t: Throwable) {
-                    error = t
-                } finally {
-                    latch.countDown()
+                }
+                applyPerAppRouting(builder)
+                // Note: do NOT close old tunFd here; Go owns the fd after detachFd().
+                // Just establish a new TUN; old ParcelFileDescriptor is dropped.
+                val parcelFd = builder.establish()
+                    ?: throw IllegalStateException("VPN 接口创建失败")
+                // Detach fd: Go dups and takes ownership. Do NOT keep/close the PFD.
+                parcelFd.detachFd()
+            },
+            protectSocket = { fd ->
+                try {
+                    protect(fd)
+                } catch (_: Throwable) {
+                    false
                 }
             }
-            // Wait for main thread to finish (max 15s)
-            val ok = try {
-                latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
-            } catch (_: Throwable) {
-                false
-            }
-            if (!ok) throw IllegalStateException("TUN 创建超时")
-            error?.let { throw it }
-            if (fdResult < 0) throw IllegalStateException("TUN fd 无效")
-            fdResult
-        }
+        )
 
         val core = com.chan.ciancore.core.singbox.SingBoxCore(applicationContext, platform)
         // Register/replace in registry for stop() path

@@ -13,7 +13,8 @@ import libbox.TunOptions
  * Go side dups the fd and takes over the TUN device.
  */
 class SingBoxPlatformInterface(
-    private val tunBuilder: (TunOptions) -> Int
+    private val tunBuilder: (TunOptions) -> Int,
+    private val protectSocket: (Int) -> Boolean = { false }
 ) : PlatformInterface {
 
     override fun openTun(options: TunOptions): Int {
@@ -27,11 +28,16 @@ class SingBoxPlatformInterface(
         }
     }
 
-    // ── Conservative defaults for the rest ──
+    // ── Interface control: MUST protect outbound sockets from TUN loop ──
 
-    override fun localDNSTransport(): libbox.LocalDNSTransport? = null
-    override fun usePlatformAutoDetectInterfaceControl(): Boolean = false
-    override fun autoDetectInterfaceControl(fd: Int) {}
+    override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
+    override fun autoDetectInterfaceControl(fd: Int) {
+        try {
+            protectSocket(fd)
+        } catch (t: Throwable) {
+            Log.w(TAG, "protect($fd) failed", t)
+        }
+    }
     override fun useProcFS(): Boolean = false
     override fun findConnectionOwner(
         ipProtocol: Int, sourceAddress: String, sourcePort: Int,
