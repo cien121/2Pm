@@ -1,5 +1,7 @@
 package com.chan.weave.ui.screens
 
+import com.chan.weave.BuildConfig
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -205,7 +207,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
             SettingsGroup(title = "关于") {
                 SettingsRow(
                     title = "版本",
-                    value = com.chan.weave.BuildConfig.VERSION_NAME,
+                    value = BuildConfig.VERSION_NAME,
                     onClick = {}
                 )
                 SettingsRow(title = "开源许可", value = "GPL-3.0", onClick = {})
