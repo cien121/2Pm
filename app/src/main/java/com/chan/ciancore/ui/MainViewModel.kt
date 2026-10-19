@@ -82,6 +82,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+        // Also refresh egress when the active node changes (e.g. after SWITCH).
+        // The state may stay CONNECTED across a switch, so the above alone
+        // would not re-check. Wait a moment for the new core's SOCKS to be ready.
+        viewModelScope.launch {
+            activeNodeId.collect { nodeId ->
+                if (nodeId != null && connectionState.value == ConnectionState.CONNECTED) {
+                    // Clear old IP immediately so the UI doesn't show stale data.
+                    _egressIp.value = null
+                    // Give the new Xray instance time to bind its SOCKS inbound.
+                    kotlinx.coroutines.delay(1500)
+                    // Only update if we're still on the same node (avoid race).
+                    if (activeNodeId.value == nodeId &&
+                        connectionState.value == ConnectionState.CONNECTED) {
+                        _egressIp.value = IpChecker.check(getApplication())
+                    }
+                }
+            }
+        }
         // Poll traffic stats while connected (2s cadence).
         viewModelScope.launch {
             var lastTx = 0L
