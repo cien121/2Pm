@@ -27,9 +27,8 @@ object SingBoxConfigBuilder {
             put("interface_name", "tun0")
             put("mtu", 9000)
             // Must match the address assigned by VpnService.Builder in openTun()
-            // System stack needs at least 2 addresses in the prefix (use /30)
-            val prefix = tunAddress.substringBeforeLast(".") + ".0/30"
-            put("address", JSONArray().put(prefix))
+            // System stack needs a prefix with at least 2 addresses; use host address with /30
+            put("address", JSONArray().put("$tunAddress/30"))
             put("stack", "system")
             put("auto_route", false)
             put("strict_route", false)
