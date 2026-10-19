@@ -207,78 +207,107 @@ class CianCoreVpnService : VpnService() {
     }
 
     /** sing-box connection path via libbox CommandServer. */
+    // ── sing-box via :singbox process ──
+    private var singBoxService: ISingBoxService? = null
+    private var singBoxConn: android.content.ServiceConnection? = null
+
+    private val singBoxCallback = object : ISingBoxCallback.Stub() {
+        override fun protect(fd: Int): Boolean {
+            return try {
+                this@CianCoreVpnService.protect(fd)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+    }
+
     private suspend fun connectSingBox(node: com.chan.ciancore.data.Node) {
         // The TUN address in sing-box config must match what VpnService.Builder assigns
         val tunAddr = try { vpnAddress } catch (_: Throwable) { "10.8.0.2" }
         val configJson = com.chan.ciancore.core.singbox.SingBoxConfigBuilder.build(node, tunAddr)
 
-        // PlatformInterface: libbox calls openTun() when TUN inbound starts.
-        // Build TUN via VpnService.Builder directly in callback thread (safe per SFA).
-        // MUST call protect() on outbound sockets via autoDetectInterfaceControl,
-        // otherwise proxy's own connections loop back into TUN.
-        val platform = com.chan.ciancore.core.singbox.SingBoxPlatformInterface(
-            tunBuilder = { tunOptions ->
-                val builder = Builder()
-                    .setSession("2Pm")
-                    .setMtu(vpnMtu)
-                try {
-                    builder.addAddress(vpnAddress, 32)
-                } catch (_: Throwable) {
-                    builder.addAddress(VPN_ADDRESS, 32)
-                }
-                if (ipv6Enabled) {
-                    try {
-                        builder.addAddress(VPN_ADDRESS_V6, 128)
-                    } catch (_: Throwable) {
-                    }
-                }
-                vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                    .forEach { dns ->
-                        try {
-                            builder.addDnsServer(dns)
-                        } catch (_: Throwable) {
-                        }
-                    }
-                builder
-                    .addRoute("0.0.0.0", 0)
-                    .addDisallowedApplication(packageName)
-                if (ipv6Enabled) {
-                    try {
-                        builder.addRoute("::", 0)
-                    } catch (_: Throwable) {
-                    }
-                }
-                applyPerAppRouting(builder)
-                // Note: do NOT close old tunFd here; Go owns the fd after detachFd().
-                // Just establish a new TUN; old ParcelFileDescriptor is dropped.
-                val parcelFd = builder.establish()
-                    ?: throw IllegalStateException("VPN 接口创建失败")
-                // Detach fd: Go dups and takes ownership. Do NOT keep/close the PFD.
-                parcelFd.detachFd()
-            },
-            protectSocket = { fd ->
-                try {
-                    protect(fd)
-                } catch (_: Throwable) {
-                    false
-                }
-            }
-        )
-
-        val core = com.chan.ciancore.core.singbox.SingBoxCore(applicationContext, platform)
-        // Register/replace in registry for stop() path
-        com.chan.ciancore.core.CoreRegistry.register(core)
-        // Timeout guard: don't let sing-box block forever (deadlock/hang)
-        val result = try {
-            kotlinx.coroutines.withTimeout(30000) {
-                core.start(configJson)
-            }
-        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            Result.failure<Unit>(IllegalStateException("sing-box 启动超时（30秒）"))
+        // 1. Create TUN in main process (VpnService)
+        val builder = Builder()
+            .setSession("2Pm")
+            .setMtu(vpnMtu)
+        try {
+            builder.addAddress(vpnAddress, 32)
+        } catch (_: Throwable) {
+            builder.addAddress(VPN_ADDRESS, 32)
         }
-        result.getOrThrow()
-        activeCore = core
+        if (ipv6Enabled) {
+            try { builder.addAddress(VPN_ADDRESS_V6, 128) } catch (_: Throwable) {}
+        }
+        vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            .forEach { dns -> try { builder.addDnsServer(dns) } catch (_: Throwable) {} }
+        builder.addRoute("0.0.0.0", 0).addDisallowedApplication(packageName)
+        if (ipv6Enabled) {
+            try { builder.addRoute("::", 0) } catch (_: Throwable) {}
+        }
+        applyPerAppRouting(builder)
+        val pfd = builder.establish() ?: throw IllegalStateException("VPN 接口创建失败")
+        // Keep PFD open; :singbox process will detachFd() (dup) via AIDL.
+        // We keep our copy to close on disconnect.
+        tunFd = pfd
+
+        // 2. Bind to :singbox process service
+        val svc = bindSingBoxService()
+        // 3. Start sing-box via AIDL (pass PFD; Go dups the fd)
+        val code = try {
+            svc.start(configJson, pfd, singBoxCallback)
+        } catch (t: Throwable) {
+            throw IllegalStateException("sing-box 启动失败: ${t.message}")
+        }
+        if (code != 0) {
+            throw IllegalStateException("sing-box 启动失败 (code=$code)")
+        }
+        // Mark active (for stop path, we use AIDL not ProxyCore)
         activeCoreType = CoreType.SING_BOX
+        // activeCore stays null; stop handled via singBoxService.stop()
+    }
+
+    private suspend fun bindSingBoxService(): ISingBoxService {
+        singBoxService?.let { return it }
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var svc: ISingBoxService? = null
+        var bindError: Throwable? = null
+        val conn = object : android.content.ServiceConnection {
+            override fun onServiceConnected(name: android.content.ComponentName?, binder: android.os.IBinder?) {
+                svc = ISingBoxService.Stub.asInterface(binder)
+                latch.countDown()
+            }
+            override fun onServiceDisconnected(name: android.content.ComponentName?) {
+                svc = null
+                singBoxService = null
+            }
+        }
+        singBoxConn = conn
+        val intent = android.content.Intent(this, SingBoxHelperService::class.java)
+        val bound = try {
+            bindService(intent, conn, android.content.Context.BIND_AUTO_CREATE)
+        } catch (t: Throwable) {
+            bindError = t
+            false
+        }
+        if (!bound) {
+            throw IllegalStateException("无法绑定 sing-box 服务: ${bindError?.message}")
+        }
+        val ok = try {
+            latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: Throwable) { false }
+        if (!ok || svc == null) {
+            throw IllegalStateException("绑定 sing-box 服务超时")
+        }
+        singBoxService = svc
+        return svc!!
+    }
+
+    private fun unbindSingBoxService() {
+        try {
+            singBoxConn?.let { unbindService(it) }
+        } catch (_: Throwable) {}
+        singBoxConn = null
+        singBoxService = null
     }
 
     /** Applies per-app allow/block lists to the VPN builder. */
@@ -324,17 +353,20 @@ class CianCoreVpnService : VpnService() {
             activeCore = null
             activeCoreType = null
         }
-        // Fallback: stop both registered cores
+        // Stop sing-box in :singbox process via AIDL
+        try {
+            singBoxService?.stop()
+        } catch (t: Throwable) {
+            Log.w(TAG, "singbox aidl stop failed", t)
+        }
+        unbindSingBoxService()
+        // Fallback: stop both registered cores (Xray in-process)
         try {
             (CoreRegistry.getOrNull(CoreType.XRAY) as? XrayCore)?.stop()
         } catch (t: Throwable) {
             Log.w(TAG, "xray stop failed", t)
         }
-        try {
-            (CoreRegistry.getOrNull(CoreType.SING_BOX) as? com.chan.ciancore.core.singbox.SingBoxCore)?.stop()
-        } catch (t: Throwable) {
-            Log.w(TAG, "singbox stop failed", t)
-        }
+        // Note: SingBoxCore is no longer used in-process; skip.
         try {
             tunFd?.close()
         } catch (t: Throwable) {

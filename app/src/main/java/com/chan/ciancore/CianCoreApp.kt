@@ -23,8 +23,19 @@ class CianCoreApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // :singbox process only needs minimal init (no Xray geo files, no DB)
+        if (isSingBoxProcess()) return
         // Ensure geo dat files are in the Xray asset dir.
         appScope.launch { GeoManager.ensureBundled(this@CianCoreApp) }
+    }
+
+    private fun isSingBoxProcess(): Boolean {
+        return try {
+            val processName = android.app.ActivityThread.currentProcessName()
+            processName?.endsWith(":singbox") == true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     companion object {
