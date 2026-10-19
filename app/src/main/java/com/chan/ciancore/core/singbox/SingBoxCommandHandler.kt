@@ -5,7 +5,7 @@ import libbox.CommandServerHandler
 
 /**
  * Minimal CommandServerHandler implementation.
- * 7 methods per sing-box v1.14.3 source.
+ * Signatures verified against sing-box v1.14.3 command_server.go.
  */
 class SingBoxCommandHandler : CommandServerHandler {
 
@@ -31,7 +31,7 @@ class SingBoxCommandHandler : CommandServerHandler {
         Log.d(TAG, "libbox: $message")
     }
 
-    override fun connectSSHAgent(): libbox.SSHAgent? = null
+    override fun connectSSHAgent(): Int = -1
 
     companion object {
         private const val TAG = "SingBoxHandler"
