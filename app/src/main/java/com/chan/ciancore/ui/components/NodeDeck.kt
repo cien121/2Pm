@@ -129,7 +129,12 @@ private fun SignalCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = if (node.host.isNotBlank()) "${node.host}:${node.port}" else "未配置",
+                text = if (node.protocol == "proxychain") {
+                    // Show chain members: "xhttp → 家宽"
+                    node.sni.ifBlank { "链式代理" }
+                } else if (node.host.isNotBlank()) {
+                    "${node.host}:${node.port}"
+                } else "未配置",
                 fontSize = 12.sp,
                 color = InkSecondary,
                 maxLines = 1,
@@ -162,19 +167,26 @@ private fun SignalCard(
 
 @Composable
 private fun ProtocolBadge(protocol: String) {
-    val label = protocol.ifBlank { "?" }.uppercase().take(8)
+    val label = when (protocol.lowercase()) {
+        "proxychain" -> "PROXYCHAIN"
+        else -> protocol.ifBlank { "?" }.uppercase().take(8)
+    }
+    val color = when (protocol.lowercase()) {
+        "proxychain" -> Color(0xFFFF9800) // orange, like ng
+        else -> AuroraViolet
+    }
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(AuroraViolet.copy(alpha = 0.18f))
-            .border(1.dp, AuroraViolet.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+            .background(color.copy(alpha = 0.18f))
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Text(
             text = label,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            color = AuroraViolet
+            color = color
         )
     }
 }

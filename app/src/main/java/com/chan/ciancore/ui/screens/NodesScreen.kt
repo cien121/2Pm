@@ -41,9 +41,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.chan.ciancore.data.ChainPrefs.chainNodeIds
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,6 +90,20 @@ fun NodesScreen(vm: MainViewModel) {
     var nodeAction by remember { mutableStateOf<Node?>(null) }
     var editingNode by remember { mutableStateOf<Node?>(null) }
     var showChainPicker by remember { mutableStateOf(false) }
+    // Chain proxy status (visible in node panel)
+    var chainActive by remember { mutableStateOf(false) }
+    var chainSummary by remember { mutableStateOf("") }
+    val panelCtx = LocalContext.current
+    LaunchedEffect(nodeList) {
+        val ids = withContext(Dispatchers.IO) {
+            panelCtx.chainNodeIds
+        }
+        chainActive = ids.isNotEmpty()
+        chainSummary = if (ids.isEmpty()) "" else {
+            ids.mapNotNull { id -> nodeList.firstOrNull { it.id == id }?.name }
+                .joinToString("→").ifEmpty { "${ids.size}跳" }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -150,11 +168,39 @@ fun NodesScreen(vm: MainViewModel) {
                                 color = AuroraCyan
                             )
                         }
+                        // Chain proxy shortcut
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(
+                                    1.dp,
+                                    if (chainActive) AuroraCyan else AuroraCyan.copy(alpha = 0.5f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .background(
+                                    if (chainActive) AuroraCyan.copy(alpha = 0.15f)
+                                    else Color.Transparent
+                                )
+                                .combinedClickable(onClick = { showChainPicker = true })
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "⛓️ 链式",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AuroraCyan
+                            )
+                        }
                     }
                 }
             }
             Text(
-                text = "${nodeList.size} 个信号源 · 长按管理 · 点延迟测速",
+                text = buildString {
+                    append("${nodeList.size} 个信号源 · 长按管理 · 点延迟测速")
+                    if (chainActive) {
+                        append(" · ⛓️ 链式: $chainSummary")
+                    }
+                },
                 fontSize = 13.sp,
                 color = InkSecondary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -209,7 +255,7 @@ fun NodesScreen(vm: MainViewModel) {
             onAddBatch = { text, onResult -> vm.addNodesFromText(text, onResult) },
             onAddSubscription = { url, onResult -> vm.addNodesFromSubscription(url, onResult) },
             onCreateManual = { protocol ->
-                if (protocol == "chain") {
+                if (protocol == "proxychain") {
                     showAdd = false
                     showChainPicker = true
                 } else {
@@ -221,12 +267,15 @@ fun NodesScreen(vm: MainViewModel) {
         )
     }
 
-    // Chain proxy picker: select the front node.
+    // Chain proxy picker: select nodes in order, creates a PROXYCHAIN virtual node.
     if (showChainPicker) {
         ChainNodePickerDialog(
-            nodes = nodeList,
+            nodes = nodeList.filter { it.protocol != "proxychain" }, // can't nest chains
             onDismiss = { showChainPicker = false },
-            onPick = { node ->
+            onPick = { selected ->
+                if (selected.isNotEmpty()) {
+                    vm.createProxyChainNode(selected)
+                }
                 showChainPicker = false
             },
             vm = vm
@@ -414,6 +463,7 @@ private fun AddNodeDialog(
         "socks" to "SOCKS",
         "http" to "HTTP",
         "hysteria2" to "Hysteria2",
+        "proxychain" to "⛓️ 链式代理"
     )
 
     AlertDialog(
@@ -868,6 +918,91 @@ private fun EditSection(title: String) {
 @Composable
 private fun ChainNodePickerDialog(
     nodes: List<Node>,
+    onDismiss: () -> Unit,
+    onPick: (List<Node>) -> Unit,
+    vm: MainViewModel
+) {
+    var selectedIds by remember { mutableStateOf<MutableList<Long>>(mutableListOf()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("⛓️ 链式代理", color = InkPrimary) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "按顺序选择多个节点，将创建链式虚拟节点（已选 ${selectedIds.size} 个）",
+                    fontSize = 12.sp,
+                    color = InkSecondary
+                )
+                if (selectedIds.isNotEmpty()) {
+                    Text(
+                        text = "顺序：" + selectedIds.mapIndexed { idx, id ->
+                            "${idx + 1}.${nodes.firstOrNull { it.id == id }?.name ?: "?"}"
+                        }.joinToString(" → "),
+                        fontSize = 11.sp,
+                        color = AuroraCyan
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                nodes.forEach { node ->
+                    val idx = selectedIds.indexOf(node.id)
+                    val selected = idx >= 0
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(
+                                1.dp,
+                                if (selected) AuroraCyan else NightOutline,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .combinedClickable(onClick = {
+                                if (selected) selectedIds.remove(node.id)
+                                else selectedIds.add(node.id)
+                            })
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (selected) {
+                                Text(
+                                    text = "${idx + 1}",
+                                    fontSize = 14.sp,
+                                    color = AuroraCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = node.name,
+                                    fontSize = 14.sp,
+                                    color = if (selected) AuroraCyan else InkPrimary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "${node.protocol.uppercase()} · ${node.host}:${node.port}",
+                                    fontSize = 11.sp,
+                                    color = InkSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val selected = selectedIds.mapNotNull { id -> nodes.firstOrNull { it.id == id } }
+                onPick(selected)
+            }) { Text("创建", color = AuroraCyan) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = InkSecondary) }
+        }
+    )
+}
     onDismiss: () -> Unit,
     onPick: (Node?) -> Unit,
     vm: MainViewModel

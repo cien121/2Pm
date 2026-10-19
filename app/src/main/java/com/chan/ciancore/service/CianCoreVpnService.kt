@@ -137,15 +137,31 @@ class CianCoreVpnService : VpnService() {
 
     /** Xray connection path (existing logic). */
     private suspend fun connectXray(node: com.chan.ciancore.data.Node) {
+        // Proxychain virtual node: members are stored as IDs in rawLink.
+        // The first member acts as the main outbound, rest are chain.
+        val (effectiveNode, chainMembers) = if (node.protocol == "proxychain") {
+            val ids = node.rawLink.removePrefix("proxychain:").trim()
+                .split(",").mapNotNull { it.toLongOrNull() }
+            val dao = CianCoreApp.instance.database.nodeDao()
+            val members = ids.mapNotNull { runCatching { dao.getById(it) }.getOrNull() }
+                .filter { it.protocol != "proxychain" } // no nesting
+            if (members.isEmpty()) {
+                throw IllegalStateException("链式节点没有可用成员")
+            }
+            // First member is main, rest are chain
+            members[0] to members.drop(1)
+        } else {
+            node to resolveChainNodes(node.id)
+        }
         val configJson = com.chan.ciancore.core.xray.XrayConfigBuilder.build(
-            node,
+            effectiveNode,
             com.chan.ciancore.core.xray.XrayConfigBuilder.BuildOptions(
                 routingRules = com.chan.ciancore.data.RoutePrefs.getRules(this),
                 domainStrategy = com.chan.ciancore.data.RoutePrefs.getDomainStrategy(this).value,
                 remoteDns = remoteDns,
                 directDns = directDns,
                 fakeDns = fakeDns,
-                chainNodes = resolveChainNodes(node.id),
+                chainNodes = chainMembers,
                 muxEnabled = com.chan.ciancore.data.StreamPrefs.isMuxEnabled(this),
                 muxConcurrency = com.chan.ciancore.data.StreamPrefs.getMuxConcurrency(this),
                 fragmentEnabled = com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(this),

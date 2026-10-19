@@ -319,6 +319,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Create a PROXYCHAIN virtual node. The chain members' IDs are stored in
+     * rawLink as "proxychain:<id1>,<id2>,...". The node appears in the panel
+     * like a normal node and can be connected, tested, shared, deleted.
+     */
+    fun createProxyChainNode(members: List<Node>) {
+        if (members.isEmpty()) return
+        viewModelScope.launch {
+            val ids = members.map { it.id }.joinToString(",")
+            val chainDesc = members.joinToString("→") { it.name }
+            val node = Node(
+                name = "链式",
+                rawLink = "proxychain:$ids",
+                protocol = "proxychain",
+                network = "tcp",
+                coreType = com.chan.ciancore.core.CoreType.XRAY,
+                // Store display hint in sni field (reused)
+                sni = chainDesc
+            )
+            withContext(Dispatchers.IO) { dao.insert(node) }
+            _notice.value = "已创建链式节点：$chainDesc"
+        }
+    }
+
+    /** Parse chain member IDs from a proxychain node's rawLink. */
+    fun getChainMemberIds(node: Node): List<Long> {
+        if (node.protocol != "proxychain") return emptyList()
+        val raw = node.rawLink.removePrefix("proxychain:").trim()
+        if (raw.isEmpty()) return emptyList()
+        return raw.split(",").mapNotNull { it.toLongOrNull() }
+    }
+
     /** Test all nodes with the configured concurrency. */
     fun testAllNodes() {
         viewModelScope.launch {
