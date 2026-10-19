@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.chan.ciancore"
+    namespace = "com.chan.weave"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.chan.ciancore"
+        applicationId = "com.chan.weave"
         minSdk = 26
         targetSdk = 34
         versionCode = 8
