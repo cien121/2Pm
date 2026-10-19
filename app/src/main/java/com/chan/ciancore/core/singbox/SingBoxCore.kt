@@ -64,14 +64,22 @@ class SingBoxCore(
     override fun start(configJson: String): Result<Unit> {
         return try {
             initialize(appContext)
+            // Validate config before starting (avoid native crash on bad JSON)
+            try {
+                Libbox.checkConfig(configJson)
+            } catch (e: Throwable) {
+                Log.e(TAG, "config validation failed", e)
+                return Result.failure(IllegalArgumentException("配置校验失败: ${e.message}"))
+            }
             val handler = SingBoxCommandHandler()
             val platform = platformInterface
                 ?: throw IllegalStateException("PlatformInterface not set for sing-box")
             // newCommandServer(handler, platformInterface)
             val server = Libbox.newCommandServer(handler, platform)
             server.start()
-            // startOrReloadService(configContent, overrideOptions=null)
-            server.startOrReloadService(configJson, null)
+            // startOrReloadService(configContent, options): options must be a real
+            // OverrideOptions — Go dereferences it directly, null would panic.
+            server.startOrReloadService(configJson, libbox.OverrideOptions())
             commandServer = server
             running = true
             Log.i(TAG, "sing-box service started")
