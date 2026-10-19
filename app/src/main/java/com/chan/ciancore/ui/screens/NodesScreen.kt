@@ -680,26 +680,6 @@ private fun EditNodeDialog(
                     onChange = { port = it.filter { c -> c.isDigit() }; error = null }
                 )
 
-                // Core selector: hy2 can choose, xhttp locked to Xray
-                if (coreOptions.size > 1) {
-                    EditSection("核心")
-                    EditChipsPairs(
-                        "核心",
-                        coreOptions.map { it.displayName to it.displayName },
-                        coreType.displayName,
-                        onSelect = { selected ->
-                            coreType = coreOptions.first { it.displayName == selected }
-                        }
-                    )
-                } else if (coreLocked) {
-                    EditSection("核心")
-                    Text(
-                        "Xray（xhttp 必须）",
-                        color = InkSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-
                 EditSection("认证")
                 when (proto) {
                     "vless", "vmess" -> {
