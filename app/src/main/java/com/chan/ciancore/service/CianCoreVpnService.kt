@@ -76,8 +76,13 @@ class CianCoreVpnService : VpnService() {
                 val nodeId = intent.getLongExtra(EXTRA_NODE_ID, -1)
                 scope.launch {
                     // Tear down current tunnel immediately, then connect.
+                    // Stop old core and WAIT for it to finish before starting new one.
                     try {
                         activeCore?.stop()
+                    } catch (_: Throwable) { }
+                    // Give native code time to release resources
+                    try {
+                        kotlinx.coroutines.delay(500)
                     } catch (_: Throwable) { }
                     activeCore = null
                     activeCoreType = null
