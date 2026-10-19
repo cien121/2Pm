@@ -41,8 +41,8 @@ object IpChecker {
         EgressInfo(v4 = v4, v6 = v6)
     }
 
-    /** Legacy single-IP check: prefers v6, falls back to v4. */
-    suspend fun check(context: Context): IpInfo? = withContext(Dispatchers.IO) {
+    /** Returns the egress IP, preferring v6 or v4 based on protocol. Runs off the main thread. */
+    suspend fun check(context: Context, preferV6: Boolean = true): IpInfo? = withContext(Dispatchers.IO) {
         val configured = context.ipInfoUrl.trim()
         if (configured.isNotEmpty()) {
             checkWithRetry(configured)?.let { ip ->
@@ -50,9 +50,17 @@ object IpChecker {
             }
         }
         val both = checkBoth(context)
-        // Prefer v6 (most of chan's nodes egress v6), fall back to v4.
-        (both.v6 ?: both.v4)?.let { IpInfo(it, it.contains(":")) }
+        // Protocol-aware: try preferred stack first, fall back to the other.
+        val ip = if (preferV6) {
+            both.v6 ?: both.v4
+        } else {
+            both.v4 ?: both.v6
+        }
+        ip?.let { IpInfo(it, it.contains(":")) }
     }
+
+    /** Legacy single-IP check: prefers v6, falls back to v4. */
+    suspend fun checkLegacy(context: Context): IpInfo? = check(context, preferV6 = true)
 
     /**
      * Check one URL with retries. New core restarts need a moment before
