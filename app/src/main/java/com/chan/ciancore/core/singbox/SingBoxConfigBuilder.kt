@@ -49,12 +49,41 @@ object SingBoxConfigBuilder {
 
         // ── Route ──
         val route = JSONObject().apply {
-            put("rules", JSONArray())
-            put("final", node.protocol.let { "proxy" })
+            val rules = JSONArray()
+            // DNS traffic -> direct (avoid loop)
+            rules.put(JSONObject().apply {
+                put("protocol", "dns")
+                put("outbound", "direct")
+            })
+            put("rules", rules)
+            put("final", "proxy")
+            put("auto_detect_interface", true)
         }
-        // Fix: final should be the proxy outbound tag
-        route.put("final", "proxy")
         config.put("route", route)
+
+        // ── DNS ──
+        val dns = JSONObject().apply {
+            val servers = JSONArray()
+            servers.put(JSONObject().apply {
+                put("tag", "remote")
+                put("address", "https://1.1.1.1/dns-query")
+                put("detour", "proxy")
+            })
+            servers.put(JSONObject().apply {
+                put("tag", "local")
+                put("address", "223.5.5.5")
+                put("detour", "direct")
+            })
+            put("servers", servers)
+            val dnsRules = JSONArray()
+            dnsRules.put(JSONObject().apply {
+                put("outbound", "any")
+                put("server", "local")
+            })
+            put("rules", dnsRules)
+            put("final", "remote")
+        }
+        config.put("dns", dns)
 
         return config.toString(2)
     }
