@@ -19,7 +19,7 @@ import com.chan.ciancore.core.CoreRegistry
 import com.chan.ciancore.core.CoreType
 import com.chan.ciancore.core.xray.XrayConfigBuilder
 import com.chan.ciancore.core.xray.XrayCore
-import com.chan.ciancore.data.ChainPrefs.chainNodeId
+import com.chan.ciancore.data.ChainPrefs.chainNodeIds
 import com.chan.ciancore.data.DnsPrefs.directDns
 import com.chan.ciancore.data.DnsPrefs.fakeDns
 import com.chan.ciancore.data.DnsPrefs.ipv6Enabled
@@ -145,7 +145,7 @@ class CianCoreVpnService : VpnService() {
                 remoteDns = remoteDns,
                 directDns = directDns,
                 fakeDns = fakeDns,
-                chainNode = resolveChainNode(node.id),
+                chainNodes = resolveChainNodes(node.id),
                 muxEnabled = com.chan.ciancore.data.StreamPrefs.isMuxEnabled(this),
                 muxConcurrency = com.chan.ciancore.data.StreamPrefs.getMuxConcurrency(this),
                 fragmentEnabled = com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(this),
@@ -270,14 +270,20 @@ class CianCoreVpnService : VpnService() {
     }
 
     /** Chain-proxy node, or null when disabled / same as main / missing. */
-    private suspend fun resolveChainNode(mainId: Long): Node? {
-        val chainId = chainNodeId
-        if (chainId <= 0 || chainId == mainId) return null
+    private suspend fun resolveChainNodes(mainId: Long): List<Node> {
+        val ids = chainNodeIds.filter { it > 0 && it != mainId }
+        if (ids.isEmpty()) return emptyList()
         return try {
-            CianCoreApp.instance.database.nodeDao().getById(chainId)
+            val dao = CianCoreApp.instance.database.nodeDao()
+            ids.mapNotNull { runCatching { dao.getById(it) }.getOrNull() }
         } catch (_: Throwable) {
-            null
+            emptyList()
         }
+    }
+
+    /** @deprecated Use resolveChainNodes for multi-hop. */
+    private suspend fun resolveChainNode(mainId: Long): Node? {
+        return resolveChainNodes(mainId).firstOrNull()
     }
 
     override fun onDestroy() {

@@ -79,10 +79,13 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
             com.chan.ciancore.CianCoreApp.instance.database.nodeDao().getAll()
         }
         chainNodes = nodes
-        val chainId = context.chainNodeId
-        chainNodeName = if (chainId > 0) {
-            nodes.firstOrNull { it.id == chainId }?.name
-        } else null
+        val ids = context.chainNodeIds
+        chainNodeName = if (ids.isEmpty()) {
+            null
+        } else {
+            ids.mapNotNull { id -> nodes.firstOrNull { it.id == id }?.name }
+                .joinToString(" → ").ifEmpty { null }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -211,9 +214,13 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
         ChainPickerDialog(
             nodes = chainNodes,
             onDismiss = { showChainPicker = false },
-            onPick = { node ->
-                context.chainNodeId = node?.id ?: -1L
-                chainNodeName = node?.name
+            onPick = { selected ->
+                context.chainNodeIds = selected.map { it.id }
+                chainNodeName = if (selected.isEmpty()) {
+                    null
+                } else {
+                    selected.joinToString(" → ") { it.name }
+                }
                 showChainPicker = false
             }
         )
@@ -298,15 +305,15 @@ private fun SettingsRow(
     }
 }
 
-/** Chain proxy node picker: select the front node all traffic goes through. */
+/** Chain proxy node picker: select multiple nodes in order (multi-hop). */
 @Composable
 private fun ChainPickerDialog(
     nodes: List<com.chan.ciancore.data.Node>,
     onDismiss: () -> Unit,
-    onPick: (com.chan.ciancore.data.Node?) -> Unit
+    onPick: (List<com.chan.ciancore.data.Node>) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val currentChainId = remember { context.chainNodeId }
+    var selectedIds by remember { mutableStateOf(context.chainNodeIds.toMutableList()) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("⛓️ 链式代理", color = InkPrimary) },
@@ -316,32 +323,25 @@ private fun ChainPickerDialog(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "选择前置节点，所有流量将经它转发",
+                    text = "按顺序选择多个节点，流量将依次经过它们（多跳）。已选 ${selectedIds.size} 个",
                     fontSize = 12.sp,
                     color = InkSecondary
                 )
                 Spacer(Modifier.height(4.dp))
-                // Disable option
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .border(
-                            1.dp,
-                            if (currentChainId <= 0) AuroraCyan else NightOutline,
-                            RoundedCornerShape(10.dp)
-                        )
-                        .clickable { onPick(null) }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                ) {
+                // Show current chain order
+                if (selectedIds.isNotEmpty()) {
                     Text(
-                        text = "不启用",
-                        fontSize = 14.sp,
-                        color = if (currentChainId <= 0) AuroraCyan else InkPrimary
+                        text = "链顺序：" + selectedIds.mapIndexed { idx, id ->
+                            "${idx + 1}.${nodes.firstOrNull { it.id == id }?.name ?: "?"}"
+                        }.joinToString(" → "),
+                        fontSize = 11.sp,
+                        color = AuroraCyan
                     )
+                    Spacer(Modifier.height(4.dp))
                 }
                 nodes.forEach { node ->
-                    val selected = node.id == currentChainId
+                    val selectedIndex = selectedIds.indexOf(node.id)
+                    val selected = selectedIndex >= 0
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -351,26 +351,59 @@ private fun ChainPickerDialog(
                                 if (selected) AuroraCyan else NightOutline,
                                 RoundedCornerShape(10.dp)
                             )
-                            .clickable { onPick(node) }
+                            .clickable {
+                                if (selected) {
+                                    selectedIds.remove(node.id)
+                                } else {
+                                    selectedIds.add(node.id)
+                                }
+                            }
                             .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = node.name,
-                                fontSize = 14.sp,
-                                color = if (selected) AuroraCyan else InkPrimary,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "${node.protocol.uppercase()} · ${node.host}:${node.port}",
-                                fontSize = 11.sp,
-                                color = InkSecondary
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (selected) {
+                                Text(
+                                    text = "${selectedIndex + 1}",
+                                    fontSize = 14.sp,
+                                    color = AuroraCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = node.name,
+                                    fontSize = 14.sp,
+                                    color = if (selected) AuroraCyan else InkPrimary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "${node.protocol.uppercase()} · ${node.host}:${node.port}",
+                                    fontSize = 11.sp,
+                                    color = InkSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
         },
-        confirmButton = { }
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val selected = selectedIds.mapNotNull { id ->
+                        nodes.firstOrNull { it.id == id }
+                    }
+                    onPick(selected)
+                }
+            ) {
+                Text("确定", color = AuroraCyan)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("取消", color = InkSecondary)
+            }
+        }
     )
 }

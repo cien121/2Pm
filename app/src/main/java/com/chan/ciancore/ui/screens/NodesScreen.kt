@@ -414,7 +414,6 @@ private fun AddNodeDialog(
         "socks" to "SOCKS",
         "http" to "HTTP",
         "hysteria2" to "Hysteria2",
-        "chain" to "⛓️ 链式代理"
     )
 
     AlertDialog(

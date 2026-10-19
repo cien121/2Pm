@@ -27,10 +27,12 @@ object XrayConfigBuilder {
         val directDns: String = "",
         val fakeDns: Boolean = false,
         /**
-         * Chain proxy: when set (and different from the main node),
-         * the main outbound dials through this node's outbound
-         * (Xray `streamSettings.sockopt.dialerProxy = "front"`).
+         * Chain proxy: ordered list of nodes the main outbound dials through
+         * in sequence (Xray `streamSettings.sockopt.dialerProxy`).
+         * Empty = disabled. Example: [A, B] → main → A → B → Internet.
          */
+        val chainNodes: List<Node> = emptyList(),
+        /** @deprecated Use chainNodes instead. */
         val chainNode: Node? = null,
         // Mux (multiplexing)
         val muxEnabled: Boolean = false,
@@ -64,20 +66,42 @@ object XrayConfigBuilder {
         )
         val mainOutbound = buildOutbound(node, "proxy")
         val outbounds = JSONArray().put(mainOutbound)
-        // Chain proxy: main outbound dials through the front node.
+        // Chain proxy: main outbound dials through the chain in sequence.
         // A broken chain node must never break the main connection.
         // NOTE: Xray removed outbound-level "proxySettings"; use
         // "streamSettings.sockopt.dialerProxy" instead.
-        val chain = options.chainNode
-        if (chain != null && chain.id != 0L && chain.id != node.id) {
-            val frontOutbound = runCatching { buildOutbound(chain, "front") }.getOrNull()
-            if (frontOutbound != null) {
-                outbounds.put(frontOutbound)
-                val streamSettings = mainOutbound.optJSONObject("streamSettings")
-                    ?: JSONObject().also { mainOutbound.put("streamSettings", it) }
-                val sockopt = streamSettings.optJSONObject("sockopt")
-                    ?: JSONObject().also { streamSettings.put("sockopt", it) }
-                sockopt.put("dialerProxy", "front")
+        // For chain [C1, C2]: main → C1 → C2 → Internet (egress = C2's IP).
+        val chainList = options.chainNodes.ifEmpty {
+            // Backwards compat: single chainNode
+            val single = options.chainNode
+            if (single != null && single.id != 0L && single.id != node.id) listOf(single) else emptyList()
+        }.filter { it.id != 0L && it.id != node.id }
+        if (chainList.isNotEmpty()) {
+            // Build chain outbounds: chain0, chain1, ...
+            val chainTags = mutableListOf<String>()
+            chainList.forEachIndexed { index, chainNode ->
+                val tag = "chain$index"
+                val outbound = runCatching { buildOutbound(chainNode, tag) }.getOrNull()
+                if (outbound != null) {
+                    outbounds.put(outbound)
+                    chainTags.add(tag)
+                }
+            }
+            // Link them: main → chain0 → chain1 → ... (last has no dialerProxy)
+            if (chainTags.isNotEmpty()) {
+                // Main dials through first chain node
+                setDialerProxy(mainOutbound, chainTags[0])
+                // Each chain node dials through the next
+                for (i in 0 until chainTags.size - 1) {
+                    val outbound = outbounds.let { arr ->
+                        // Find by tag
+                        (0 until arr.length()).map { arr.getJSONObject(it) }
+                            .firstOrNull { it.optString("tag") == chainTags[i] }
+                    }
+                    if (outbound != null) {
+                        setDialerProxy(outbound, chainTags[i + 1])
+                    }
+                }
             }
         }
         outbounds.put(directOutbound()).put(blockOutbound())
@@ -617,5 +641,14 @@ object XrayConfigBuilder {
             tls.put("verifyPeerCertByName", n.verifyPeerCertByName)
         }
         return tls
+    }
+
+    /** Sets streamSettings.sockopt.dialerProxy on an outbound (Xray chain). */
+    private fun setDialerProxy(outbound: JSONObject, proxyTag: String) {
+        val streamSettings = outbound.optJSONObject("streamSettings")
+            ?: JSONObject().also { outbound.put("streamSettings", it) }
+        val sockopt = streamSettings.optJSONObject("sockopt")
+            ?: JSONObject().also { streamSettings.put("sockopt", it) }
+        sockopt.put("dialerProxy", proxyTag)
     }
 }
