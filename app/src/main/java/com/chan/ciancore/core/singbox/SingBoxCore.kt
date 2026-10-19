@@ -91,23 +91,23 @@ class SingBoxCore(
     }
 
     override fun stop() {
-        try {
-            val server = commandServer as? libbox.CommandServer ?: return
-            try {
-                server.closeService()
-            } catch (e: Throwable) {
-                Log.w(TAG, "closeService failed", e)
-            }
-            try {
-                server.close()
-            } catch (e: Throwable) {
-                Log.w(TAG, "server close failed", e)
-            }
-        } catch (e: Throwable) {
-            Log.e(TAG, "sing-box stop failed", e)
-        } finally {
+        val server = synchronized(this) {
+            val s = commandServer as? libbox.CommandServer
             commandServer = null
             running = false
+            s
+        } ?: return
+        // Close outside the lock; each step guarded so a native crash
+        // in one doesn't skip the other.
+        try {
+            server.closeService()
+        } catch (e: Throwable) {
+            Log.w(TAG, "closeService failed", e)
+        }
+        try {
+            server.close()
+        } catch (e: Throwable) {
+            Log.w(TAG, "server close failed", e)
         }
     }
 
