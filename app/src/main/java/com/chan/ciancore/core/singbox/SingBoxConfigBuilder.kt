@@ -81,7 +81,6 @@ object SingBoxConfigBuilder {
                 put("type", "udp")
                 put("server", "223.5.5.5")
                 put("server_port", 53)
-                put("detour", "direct")
             })
             put("servers", servers)
             val dnsRules = JSONArray()
