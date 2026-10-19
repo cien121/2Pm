@@ -101,7 +101,22 @@ class XrayCore(private val appContext: Context) : ProxyCore {
 
     override fun stop() {
         try {
-            controller?.stopLoop()
+            val c = controller
+            c?.stopLoop()
+            // Wait for native Xray to actually stop (stopLoop is async).
+            // If we start a new instance while the old one still holds
+            // 127.0.0.1:10808, the new SOCKS inbound fails to bind and
+            // traffic keeps going through the OLD node (IP doesn't change).
+            var waited = 0
+            while (waited < 3000) {
+                try {
+                    if (c?.getIsRunning() != true) break
+                } catch (_: Throwable) {
+                    break
+                }
+                Thread.sleep(100)
+                waited += 100
+            }
         } catch (t: Throwable) {
             Log.w(TAG, "stopLoop failed", t)
         } finally {

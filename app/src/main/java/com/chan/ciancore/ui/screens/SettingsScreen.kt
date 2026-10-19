@@ -175,12 +175,6 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     value = "v26.10.10",
                     onClick = {}
                 )
-                SettingsRow(
-                    title = "sing-box 版本",
-                    value = "v1.14.3",
-                    onClick = {}
-                )
-                CoreSelectorRow()
             }
 
             SettingsGroup(title = "关于") {
@@ -274,62 +268,3 @@ private fun SettingsRow(
  * Sets the default core for new connections; per-node override
  * lives on the Node itself.
  */
-@Composable
-private fun CoreSelectorRow() {
-    val active by CoreRegistry.activeType.collectAsState()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "默认核心",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            color = InkPrimary
-        )
-        Text(
-            text = "新连接使用的代理引擎",
-            fontSize = 12.sp,
-            color = InkSecondary
-        )
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(NightOutline.copy(alpha = 0.5f))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            CoreType.entries.forEach { type ->
-                val selected = type == active
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (selected) AuroraCyan.copy(alpha = 0.85f)
-                            else Color.Transparent
-                        )
-                        .border(
-                            1.dp,
-                            if (selected) AuroraCyan.copy(alpha = 0.6f)
-                            else Color.Transparent,
-                            RoundedCornerShape(10.dp)
-                        )
-                        .clickable { CoreRegistry.setActive(type) }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = type.displayName,
-                        fontSize = 14.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) Color.White else InkPrimary
-                    )
-                }
-            }
-        }
-    }
-}
