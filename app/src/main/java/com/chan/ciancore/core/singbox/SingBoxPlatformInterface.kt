@@ -38,6 +38,10 @@ class SingBoxPlatformInterface(
             Log.w(TAG, "protect($fd) failed", t)
         }
     }
+
+    // ── Conservative defaults for the rest ──
+
+    override fun localDNSTransport(): libbox.LocalDNSTransport? = null
     override fun useProcFS(): Boolean = false
     override fun findConnectionOwner(
         ipProtocol: Int, sourceAddress: String, sourcePort: Int,
