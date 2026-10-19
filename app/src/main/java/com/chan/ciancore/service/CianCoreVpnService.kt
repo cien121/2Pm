@@ -56,6 +56,8 @@ class CianCoreVpnService : VpnService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tunFd: ParcelFileDescriptor? = null
     private var activeNode: Node? = null
+    private var activeCore: com.chan.ciancore.core.ProxyCore? = null
+    private var activeCoreType: CoreType? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -75,8 +77,10 @@ class CianCoreVpnService : VpnService() {
                 scope.launch {
                     // Tear down current tunnel immediately, then connect.
                     try {
-                        (CoreRegistry.getOrNull(CoreType.XRAY) as? XrayCore)?.stop()
+                        activeCore?.stop()
                     } catch (_: Throwable) { }
+                    activeCore = null
+                    activeCoreType = null
                     try { tunFd?.close() } catch (_: Throwable) { }
                     tunFd = null
                     _state.value = ConnectionState.IDLE
@@ -104,45 +108,112 @@ class CianCoreVpnService : VpnService() {
             activeNode = node
             goForeground("正在连接 ${node.name}", node.name)
 
-            if (node.coreType != CoreType.XRAY) {
-                throw IllegalStateException("${node.coreType.displayName} 核心下一阶段支持，请先用 Xray 节点")
+            when (node.coreType) {
+                CoreType.XRAY -> connectXray(node)
+                CoreType.SING_BOX -> connectSingBox(node)
             }
 
-            val configJson = XrayConfigBuilder.build(
-                node,
-                XrayConfigBuilder.BuildOptions(
-                    routingRules = com.chan.ciancore.data.RoutePrefs.getRules(this),
-                    domainStrategy = com.chan.ciancore.data.RoutePrefs.getDomainStrategy(this).value,
-                    remoteDns = remoteDns,
-                    directDns = directDns,
-                    fakeDns = fakeDns,
-                    chainNode = resolveChainNode(node.id),
-                    muxEnabled = com.chan.ciancore.data.StreamPrefs.isMuxEnabled(this),
-                    muxConcurrency = com.chan.ciancore.data.StreamPrefs.getMuxConcurrency(this),
-                    fragmentEnabled = com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(this),
-                    fragmentPackets = com.chan.ciancore.data.StreamPrefs.getFragmentPackets(this),
-                    fragmentLength = com.chan.ciancore.data.StreamPrefs.getFragmentLength(this),
-                    fragmentInterval = com.chan.ciancore.data.StreamPrefs.getFragmentInterval(this),
-                    localDnsEnabled = com.chan.ciancore.data.StreamPrefs.isLocalDnsEnabled(this)
-                )
-            )
+            _activeNodeId.value = node.id
+            _state.value = ConnectionState.CONNECTED
+            goForeground("已连接 · ${node.name}", node.name)
+            Log.i(TAG, "connected: ${node.name}")
+        } catch (t: Throwable) {
+            val msg = t.message?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName
+            Log.e(TAG, "connect failed", t)
+            _errorMessage.value = msg
+            _state.value = ConnectionState.ERROR
+            cleanupLocked()
+            stopSelf()
+        }
+    }
 
+    /** Xray connection path (existing logic). */
+    private suspend fun connectXray(node: com.chan.ciancore.data.Node) {
+        val configJson = com.chan.ciancore.core.xray.XrayConfigBuilder.build(
+            node,
+            com.chan.ciancore.core.xray.XrayConfigBuilder.BuildOptions(
+                routingRules = com.chan.ciancore.data.RoutePrefs.getRules(this),
+                domainStrategy = com.chan.ciancore.data.RoutePrefs.getDomainStrategy(this).value,
+                remoteDns = remoteDns,
+                directDns = directDns,
+                fakeDns = fakeDns,
+                chainNode = resolveChainNode(node.id),
+                muxEnabled = com.chan.ciancore.data.StreamPrefs.isMuxEnabled(this),
+                muxConcurrency = com.chan.ciancore.data.StreamPrefs.getMuxConcurrency(this),
+                fragmentEnabled = com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(this),
+                fragmentPackets = com.chan.ciancore.data.StreamPrefs.getFragmentPackets(this),
+                fragmentLength = com.chan.ciancore.data.StreamPrefs.getFragmentLength(this),
+                fragmentInterval = com.chan.ciancore.data.StreamPrefs.getFragmentInterval(this),
+                localDnsEnabled = com.chan.ciancore.data.StreamPrefs.isLocalDnsEnabled(this)
+            )
+        )
+
+        val builder = Builder()
+            .setSession("2Pm")
+            .setMtu(vpnMtu)
+        try {
+            builder.addAddress(vpnAddress, 32)
+        } catch (_: Throwable) {
+            builder.addAddress(VPN_ADDRESS, 32)
+        }
+        if (ipv6Enabled) {
+            try {
+                builder.addAddress(VPN_ADDRESS_V6, 128)
+            } catch (_: Throwable) {
+            }
+        }
+        vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            .forEach { dns ->
+                try {
+                    builder.addDnsServer(dns)
+                } catch (_: Throwable) {
+                }
+            }
+        builder
+            .addRoute("0.0.0.0", 0)
+            .addDisallowedApplication(packageName)
+        if (ipv6Enabled) {
+            try {
+                builder.addRoute("::", 0)
+            } catch (_: Throwable) {
+            }
+        }
+        applyPerAppRouting(builder)
+        try {
+            tunFd?.close()
+        } catch (_: Throwable) {
+        }
+        tunFd = builder.establish()
+            ?: throw IllegalStateException("VPN 接口创建失败")
+
+        val core = com.chan.ciancore.core.CoreRegistry.get(CoreType.XRAY) as? com.chan.ciancore.core.xray.XrayCore
+            ?: throw IllegalStateException("Xray 核心未注册")
+        core.setTunFd(tunFd!!.fd)
+        core.start(configJson).getOrThrow()
+        activeCoreType = CoreType.XRAY
+    }
+
+    /** sing-box connection path via libbox CommandServer. */
+    private suspend fun connectSingBox(node: com.chan.ciancore.data.Node) {
+        val configJson = com.chan.ciancore.core.singbox.SingBoxConfigBuilder.build(node)
+
+        // PlatformInterface: libbox calls openTun() when TUN inbound starts.
+        // We build the TUN via VpnService.Builder and return the detached fd.
+        val platform = com.chan.ciancore.core.singbox.SingBoxPlatformInterface { tunOptions ->
             val builder = Builder()
-                .setSession("CianCore")
+                .setSession("2Pm")
                 .setMtu(vpnMtu)
             try {
                 builder.addAddress(vpnAddress, 32)
             } catch (_: Throwable) {
                 builder.addAddress(VPN_ADDRESS, 32)
             }
-            // IPv6: assign a ULA address so v6 traffic enters the tunnel.
             if (ipv6Enabled) {
                 try {
                     builder.addAddress(VPN_ADDRESS_V6, 128)
                 } catch (_: Throwable) {
                 }
             }
-            // VPN interface DNS servers (configurable).
             vpnDns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 .forEach { dns ->
                     try {
@@ -159,33 +230,24 @@ class CianCoreVpnService : VpnService() {
                 } catch (_: Throwable) {
                 }
             }
-            // Per-app routing.
             applyPerAppRouting(builder)
-            // Close any stale interface before establishing a new one.
             try {
                 tunFd?.close()
             } catch (_: Throwable) {
             }
-            tunFd = builder.establish()
+            val parcelFd = builder.establish()
                 ?: throw IllegalStateException("VPN 接口创建失败")
-
-            val core = CoreRegistry.get(CoreType.XRAY) as? XrayCore
-                ?: throw IllegalStateException("Xray 核心未注册")
-            core.setTunFd(tunFd!!.fd)
-            core.start(configJson).getOrThrow()
-
-            _activeNodeId.value = node.id
-            _state.value = ConnectionState.CONNECTED
-            goForeground("已连接 · ${node.name}", node.name)
-            Log.i(TAG, "connected: ${node.name}")
-        } catch (t: Throwable) {
-            val msg = t.message?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName
-            Log.e(TAG, "connect failed", t)
-            _errorMessage.value = msg
-            _state.value = ConnectionState.ERROR
-            cleanupLocked()
-            stopSelf()
+            tunFd = parcelFd
+            // Detach fd to return as Int (Go side dups it)
+            parcelFd.detachFd()
         }
+
+        val core = com.chan.ciancore.core.singbox.SingBoxCore(applicationContext, platform)
+        // Register/replace in registry for stop() path
+        com.chan.ciancore.core.CoreRegistry.register(core)
+        core.start(configJson).getOrThrow()
+        activeCore = core
+        activeCoreType = CoreType.SING_BOX
     }
 
     /** Applies per-app allow/block lists to the VPN builder. */
@@ -224,9 +286,23 @@ class CianCoreVpnService : VpnService() {
     /** Stops the core and closes the TUN fd. Call from the IO scope. */
     private fun cleanupLocked() {
         try {
+            activeCore?.stop()
+        } catch (t: Throwable) {
+            Log.w(TAG, "active core stop failed", t)
+        } finally {
+            activeCore = null
+            activeCoreType = null
+        }
+        // Fallback: stop both registered cores
+        try {
             (CoreRegistry.getOrNull(CoreType.XRAY) as? XrayCore)?.stop()
         } catch (t: Throwable) {
-            Log.w(TAG, "core stop failed", t)
+            Log.w(TAG, "xray stop failed", t)
+        }
+        try {
+            (CoreRegistry.getOrNull(CoreType.SING_BOX) as? com.chan.ciancore.core.singbox.SingBoxCore)?.stop()
+        } catch (t: Throwable) {
+            Log.w(TAG, "singbox stop failed", t)
         }
         try {
             tunFd?.close()

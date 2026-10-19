@@ -7,27 +7,35 @@ import com.chan.ciancore.core.ProxyCore
 import com.chan.ciancore.core.TrafficStats
 import go.Seq
 import java.io.File
+import libbox.Libbox
+import libbox.SetupOptions
 
-class SingBoxCore(private val appContext: Context) : ProxyCore {
+/**
+ * sing-box core via official libbox (v1.14.3).
+ *
+ * Real API (verified against sing-box v1.14.3 source):
+ * - Libbox.setup(SetupOptions)
+ * - Libbox.newCommandServer(handler, platformInterface) -> CommandServer
+ * - server.start() -> server.startOrReloadService(configJson, null)
+ * - server.closeService() + server.close() to stop
+ * - TUN is created via PlatformInterface.openTun() callback (libbox -> app direction)
+ */
+class SingBoxCore(
+    private val appContext: Context,
+    private val platformInterface: SingBoxPlatformInterface? = null
+) : ProxyCore {
 
     override val type: CoreType = CoreType.SING_BOX
     override val version: String = "v1.14.3"
 
     @Volatile
-    private var instance: Any? = null
+    private var commandServer: Any? = null
 
     @Volatile
     private var initialized = false
 
     @Volatile
     private var running = false
-
-    @Volatile
-    private var tunFd: Int = 0
-
-    fun setTunFd(fd: Int) {
-        tunFd = fd
-    }
 
     override fun initialize(context: Context) {
         if (initialized) return
@@ -40,38 +48,33 @@ class SingBoxCore(private val appContext: Context) : ProxyCore {
                 throw e
             }
             Seq.setContext(context.applicationContext)
+            // Libbox.setup with SetupOptions
+            val filesDir = context.filesDir
+            val baseDir = File(filesDir, "singbox").apply { mkdirs() }.absolutePath
+            val options = SetupOptions()
+            options.basePath = baseDir
+            options.workingPath = baseDir
+            options.tempPath = File(filesDir, "singbox-tmp").apply { mkdirs() }.absolutePath
+            Libbox.setup(options)
             initialized = true
+            Log.i(TAG, "libbox setup done: $baseDir")
         }
     }
 
     override fun start(configJson: String): Result<Unit> {
         return try {
             initialize(appContext)
-            val libboxClass = Class.forName("libbox.Libbox")
-            val filesDir = appContext.filesDir
-            val workDir = File(filesDir, "singbox").apply { mkdirs() }.absolutePath
-            val setupMethod = libboxClass.getMethod(
-                "setup",
-                String::class.java, String::class.java, String::class.java
-            )
-            setupMethod.invoke(null, workDir, workDir, workDir)
-            val optionsClass = Class.forName("libbox.PlatformOptions")
-            val options = optionsClass.newInstance()
-            try {
-                val configField = optionsClass.getField("configContent")
-                configField.set(options, configJson)
-            } catch (_: Throwable) {
-                val setter = optionsClass.methods.firstOrNull {
-                    it.name.equals("setConfigContent", ignoreCase = true)
-                }
-                setter?.invoke(options, configJson)
-            }
-            val newMethod = libboxClass.getMethod("newSingBox", optionsClass)
-            val boxInstance = newMethod.invoke(null, options)
-            instance = boxInstance
-            val startMethod = boxInstance.javaClass.getMethod("start")
-            startMethod.invoke(boxInstance)
+            val handler = SingBoxCommandHandler()
+            val platform = platformInterface
+                ?: throw IllegalStateException("PlatformInterface not set for sing-box")
+            // newCommandServer(handler, platformInterface)
+            val server = Libbox.newCommandServer(handler, platform)
+            server.start()
+            // startOrReloadService(configContent, overrideOptions=null)
+            server.startOrReloadService(configJson, null)
+            commandServer = server
             running = true
+            Log.i(TAG, "sing-box service started")
             Result.success(Unit)
         } catch (e: Throwable) {
             Log.e(TAG, "sing-box start failed", e)
@@ -81,13 +84,21 @@ class SingBoxCore(private val appContext: Context) : ProxyCore {
 
     override fun stop() {
         try {
-            val boxInstance = instance ?: return
-            val closeMethod = boxInstance.javaClass.getMethod("close")
-            closeMethod.invoke(boxInstance)
+            val server = commandServer as? libbox.CommandServer ?: return
+            try {
+                server.closeService()
+            } catch (e: Throwable) {
+                Log.w(TAG, "closeService failed", e)
+            }
+            try {
+                server.close()
+            } catch (e: Throwable) {
+                Log.w(TAG, "server close failed", e)
+            }
         } catch (e: Throwable) {
             Log.e(TAG, "sing-box stop failed", e)
         } finally {
-            instance = null
+            commandServer = null
             running = false
         }
     }
