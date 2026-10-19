@@ -49,7 +49,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.chan.ciancore.data.ChainPrefs.chainNodeId
+import com.chan.ciancore.data.ChainPrefs.chainNodeIds
 import kotlinx.coroutines.withContext
 
 /**
@@ -313,7 +313,7 @@ private fun ChainPickerDialog(
     onPick: (List<com.chan.ciancore.data.Node>) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var selectedIds by remember { mutableStateOf(context.chainNodeIds.toMutableList()) }
+    var selectedIds by remember { mutableStateOf<MutableList<Long>>(context.chainNodeIds.toMutableList()) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("⛓️ 链式代理", color = InkPrimary) },
