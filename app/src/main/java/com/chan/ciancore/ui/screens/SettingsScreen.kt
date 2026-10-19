@@ -49,6 +49,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.chan.ciancore.data.ChainPrefs.chainNodeId
+import kotlinx.coroutines.withContext
 
 /**
  * Settings — quiet control room.
@@ -67,6 +69,21 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
     // Stream tuning (Mux / Fragment / Local DNS)
     var muxEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isMuxEnabled(context)) }
     var fragmentEnabled by remember { mutableStateOf(com.chan.ciancore.data.StreamPrefs.isFragmentEnabled(context)) }
+    // Chain proxy
+    var showChainPicker by remember { mutableStateOf(false) }
+    var chainNodes by remember { mutableStateOf<List<com.chan.ciancore.data.Node>>(emptyList()) }
+    var chainNodeName by remember { mutableStateOf<String?>(null) }
+    // Load chain state
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val nodes = withContext(Dispatchers.IO) {
+            com.chan.ciancore.CianCoreApp.instance.database.nodeDao().getAll()
+        }
+        chainNodes = nodes
+        val chainId = context.chainNodeId
+        chainNodeName = if (chainId > 0) {
+            nodes.firstOrNull { it.id == chainId }?.name
+        } else null
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -137,6 +154,11 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     onClick = { onNavigate("routing") }
                 )
                 SettingsRow(
+                    title = "⛓️ 链式代理",
+                    value = chainNodeName ?: "未启用",
+                    onClick = { showChainPicker = true }
+                )
+                SettingsRow(
                     title = "DNS 与网络",
                     value = "DNS / 测速 / VPN 参数",
                     onClick = { onNavigate("dns") }
@@ -182,6 +204,19 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                 SettingsRow(title = "开源许可", value = "GPL-3.0", onClick = {})
             }
         }
+    }
+
+    // Chain proxy picker dialog
+    if (showChainPicker) {
+        ChainPickerDialog(
+            nodes = chainNodes,
+            onDismiss = { showChainPicker = false },
+            onPick = { node ->
+                context.chainNodeId = node?.id ?: -1L
+                chainNodeName = node?.name
+                showChainPicker = false
+            }
+        )
     }
 }
 
@@ -263,8 +298,79 @@ private fun SettingsRow(
     }
 }
 
-/**
- * Core engine selector — Xray / sing-box segmented control.
- * Sets the default core for new connections; per-node override
- * lives on the Node itself.
- */
+/** Chain proxy node picker: select the front node all traffic goes through. */
+@Composable
+private fun ChainPickerDialog(
+    nodes: List<com.chan.ciancore.data.Node>,
+    onDismiss: () -> Unit,
+    onPick: (com.chan.ciancore.data.Node?) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val currentChainId = remember { context.chainNodeId }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("⛓️ 链式代理", color = InkPrimary) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "选择前置节点，所有流量将经它转发",
+                    fontSize = 12.sp,
+                    color = InkSecondary
+                )
+                Spacer(Modifier.height(4.dp))
+                // Disable option
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(
+                            1.dp,
+                            if (currentChainId <= 0) AuroraCyan else NightOutline,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onPick(null) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "不启用",
+                        fontSize = 14.sp,
+                        color = if (currentChainId <= 0) AuroraCyan else InkPrimary
+                    )
+                }
+                nodes.forEach { node ->
+                    val selected = node.id == currentChainId
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(
+                                1.dp,
+                                if (selected) AuroraCyan else NightOutline,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onPick(node) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = node.name,
+                                fontSize = 14.sp,
+                                color = if (selected) AuroraCyan else InkPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${node.protocol.uppercase()} · ${node.host}:${node.port}",
+                                fontSize = 11.sp,
+                                color = InkSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { }
+    )
+}
