@@ -1,7 +1,7 @@
 package com.chan.ciancore.ui.screens
 
 import android.content.Intent
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,7 +98,7 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .combinedClickable(onClick = { vm.refreshEgressManually() })
+                        .clickable(onClick = { vm.refreshEgressManually() })
                         .padding(horizontal = 32.dp)
                 ) {
                     Text(
