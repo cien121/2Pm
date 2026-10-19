@@ -1,21 +1,13 @@
 package com.chan.ciancore.core
 
 import android.content.Context
-import com.chan.ciancore.core.singbox.SingBoxCore
 import com.chan.ciancore.core.xray.XrayCore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Pluggable core registry — the only place that knows which concrete
- * cores exist.
- *
- * To add a third core:
- *  1. Add an entry to [CoreType]
- *  2. Implement [ProxyCore]
- *  3. Register it in [registerBuiltins] below
- * That's it. UI, VPN service and database code stay untouched.
+ * Pluggable core registry — single core (Xray) now; sing-box removed.
  */
 object CoreRegistry {
 
@@ -30,7 +22,6 @@ object CoreRegistry {
 
     private fun registerBuiltins(context: Context) {
         register(XrayCore(context))
-        register(SingBoxCore(context))
     }
 
     fun register(core: ProxyCore) {
