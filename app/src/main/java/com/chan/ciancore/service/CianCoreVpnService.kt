@@ -255,7 +255,15 @@ class CianCoreVpnService : VpnService() {
         val core = com.chan.ciancore.core.singbox.SingBoxCore(applicationContext, platform)
         // Register/replace in registry for stop() path
         com.chan.ciancore.core.CoreRegistry.register(core)
-        core.start(configJson).getOrThrow()
+        // Timeout guard: don't let sing-box block forever (deadlock/hang)
+        val result = try {
+            kotlinx.coroutines.withTimeout(30000) {
+                core.start(configJson)
+            }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Result.failure<Unit>(IllegalStateException("sing-box 启动超时（30秒）"))
+        }
+        result.getOrThrow()
         activeCore = core
         activeCoreType = CoreType.SING_BOX
     }
