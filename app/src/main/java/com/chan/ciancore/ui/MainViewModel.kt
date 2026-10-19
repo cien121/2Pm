@@ -54,6 +54,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _egressIp = MutableStateFlow<IpChecker.IpInfo?>(null)
     val egressIp: StateFlow<IpChecker.IpInfo?> = _egressIp.asStateFlow()
 
+    /** Dual-stack egress display: "v4 · v6" or single stack. Null = checking/unknown. */
+    private val _egressDual = MutableStateFlow<String?>(null)
+    val egressDual: StateFlow<String?> = _egressDual.asStateFlow()
+
+    /**
+     * Generation counter for egress checks. Incremented on every node switch.
+     * When a check result returns, it must match the current generation;
+     * stale results from the OLD core are discarded to avoid overwriting
+     * the new IP with a slow old response.
+     */
+    private val egressGeneration = java.util.concurrent.atomic.AtomicLong(0)
+
     /** Live traffic speed in bytes/sec, polled while connected. */
     data class TrafficSpeed(val downBps: Long = 0, val upBps: Long = 0)
     private val _trafficSpeed = MutableStateFlow(TrafficSpeed())
@@ -76,9 +88,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             connectionState.collect { state ->
                 if (state == ConnectionState.CONNECTED) {
-                    _egressIp.value = IpChecker.check(getApplication())
+                    refreshEgress(egressGeneration.incrementAndGet())
                 } else if (state == ConnectionState.IDLE) {
+                    egressGeneration.incrementAndGet() // invalidate in-flight checks
                     _egressIp.value = null
+                    _egressDual.value = null
                 }
             }
         }
@@ -88,15 +102,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             activeNodeId.collect { nodeId ->
                 if (nodeId != null && connectionState.value == ConnectionState.CONNECTED) {
-                    // Clear old IP immediately so the UI doesn't show stale data.
-                    _egressIp.value = null
-                    // Give the new Xray instance time to bind its SOCKS inbound.
-                    kotlinx.coroutines.delay(1500)
-                    // Only update if we're still on the same node (avoid race).
-                    if (activeNodeId.value == nodeId &&
-                        connectionState.value == ConnectionState.CONNECTED) {
-                        _egressIp.value = IpChecker.check(getApplication())
-                    }
+                    refreshEgress(egressGeneration.incrementAndGet())
                 }
             }
         }
@@ -224,6 +230,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Pending node ID from shortcut when VPN permission was requested. */
     private val _pendingShortcutNodeId = MutableStateFlow<Long?>(null)
+
+    /**
+     * Refresh egress IP with generation guard. Clears the display immediately
+     * (shows "检测中…"), waits for the new core's SOCKS to be ready, then checks
+     * both v4 and v6. Stale results from a previous generation are discarded.
+     */
+    private fun refreshEgress(generation: Long) {
+        viewModelScope.launch {
+            // Immediately clear: never show the previous node's IP as current.
+            _egressIp.value = null
+            _egressDual.value = null
+            // Give the new Xray instance time to bind its SOCKS inbound.
+            kotlinx.coroutines.delay(1500)
+            // Abort if a newer switch happened while we waited.
+            if (egressGeneration.get() != generation) return@launch
+            if (connectionState.value != ConnectionState.CONNECTED) return@launch
+            val both = IpChecker.checkBoth(getApplication())
+            // Double-check generation after the (slow) network check.
+            if (egressGeneration.get() != generation) return@launch
+            if (connectionState.value != ConnectionState.CONNECTED) return@launch
+            // Update dual-stack display.
+            _egressDual.value = when {
+                both.v4 != null && both.v6 != null -> "${both.v4} · ${both.v6}"
+                both.v4 != null -> both.v4
+                both.v6 != null -> both.v6
+                else -> null // detection failed; stays on "检测中…" rather than stale IP
+            }
+            // Keep legacy single-IP for existing UI.
+            val single = (both.v6 ?: both.v4)?.let { IpChecker.IpInfo(it, it.contains(":")) }
+            _egressIp.value = single
+        }
+    }
 
     /** Called after VPN permission granted for a shortcut-initiated connection. */
     fun onShortcutVpnPermissionGranted() {

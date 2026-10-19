@@ -56,6 +56,7 @@ fun HomeScreen(
     val errorMsg by vm.connectionError.collectAsState()
     val notice by vm.notice.collectAsState()
     val egressIp by vm.egressIp.collectAsState()
+    val egressDual by vm.egressDual.collectAsState()
     val trafficSpeed by vm.trafficSpeed.collectAsState()
 
     val selectedNode = nodeList.firstOrNull { it.id == currentSelectedId }
@@ -92,7 +93,9 @@ fun HomeScreen(
             if (state == ConnectionState.CONNECTED) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = if (egressIp != null) {
+                    text = if (egressDual != null) {
+                        "出口 $egressDual"
+                    } else if (egressIp != null) {
                         "出口 ${egressIp!!.ip} · ${if (egressIp!!.isV6) "IPv6" else "IPv4"}"
                     } else {
                         "出口检测中…"

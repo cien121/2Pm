@@ -3,6 +3,7 @@ package com.chan.ciancore.data
 import android.content.Context
 import com.chan.ciancore.data.DnsPrefs.ipInfoUrl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -12,45 +13,88 @@ import java.net.URL
 
 /**
  * Egress IP check: what the internet sees through the tunnel.
- * Uses the user-configured info URL (default api.ip.sb/geoip),
- * falls back to plain-text ipify endpoints. Auto-detects IPv4/IPv6.
  *
  * IMPORTANT: The request goes through the local SOCKS inbound (127.0.0.1:10808)
  * so it traverses the tunnel. A direct connection would bypass the VPN
  * (the app's own package is excluded from the TUN to avoid loops) and
  * return the real IP instead of the egress IP.
+ *
+ * Design notes (per expert review):
+ * - Every check uses a FRESH connection (Connection: close, no keep-alive reuse).
+ *   Reusing a pooled connection could silently go through the OLD tunnel.
+ * - v4 and v6 are checked SEPARATELY. A node may egress v6 only (VLESS) or
+ *   v4 only (Hysteria); testing just one would miss the other.
+ * - Retries with backoff: right after a core restart the SOCKS inbound may
+ *   need 1-2s before it accepts connections. Don't give up on first timeout.
  */
 object IpChecker {
 
     data class IpInfo(val ip: String, val isV6: Boolean)
 
-    /** Returns the egress IP, or null on failure. Runs off the main thread. */
-    suspend fun check(context: Context): IpInfo? = withContext(Dispatchers.IO) {
-        val configured = context.ipInfoUrl.trim()
-        (if (configured.isNotEmpty()) checkUrl(configured) else null)
-            ?: checkUrl("https://api64.ipify.org")
-            ?: checkUrl("https://api.ipify.org")
+    /** Both stacks, either may be null if that stack has no egress. */
+    data class EgressInfo(val v4: String?, val v6: String?)
+
+    /** Returns egress IPs for both stacks. Runs off the main thread. */
+    suspend fun checkBoth(context: Context): EgressInfo = withContext(Dispatchers.IO) {
+        val v6 = checkWithRetry("https://api64.ipify.org")
+        val v4 = checkWithRetry("https://api.ipify.org")
+        EgressInfo(v4 = v4, v6 = v6)
     }
 
-    private fun checkUrl(url: String): IpInfo? {
+    /** Legacy single-IP check: prefers v6, falls back to v4. */
+    suspend fun check(context: Context): IpInfo? = withContext(Dispatchers.IO) {
+        val configured = context.ipInfoUrl.trim()
+        if (configured.isNotEmpty()) {
+            checkWithRetry(configured)?.let { ip ->
+                return@withContext IpInfo(ip, ip.contains(":"))
+            }
+        }
+        val both = checkBoth(context)
+        // Prefer v6 (most of chan's nodes egress v6), fall back to v4.
+        (both.v6 ?: both.v4)?.let { IpInfo(it, it.contains(":")) }
+    }
+
+    /**
+     * Check one URL with retries. New core restarts need a moment before
+     * the SOCKS inbound accepts connections, so retry a few times.
+     */
+    private suspend fun checkWithRetry(url: String, maxAttempts: Int = 4): String? {
+        var lastError: Throwable? = null
+        repeat(maxAttempts) { attempt ->
+            try {
+                checkUrlOnce(url)?.let { return it }
+            } catch (t: Throwable) {
+                lastError = t
+            }
+            // Backoff: 500ms, 1000ms, 1500ms
+            if (attempt < maxAttempts - 1) delay(500L * (attempt + 1))
+        }
+        return null
+    }
+
+    /** Single attempt with a completely fresh connection (no keep-alive reuse). */
+    private fun checkUrlOnce(url: String): String? {
+        var conn: HttpURLConnection? = null
         return try {
             // Route through Xray's SOCKS inbound so the check exits via the tunnel.
             val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 10808))
-            val conn = (URL(url).openConnection(proxy) as HttpURLConnection).apply {
-                connectTimeout = 10000
-                readTimeout = 10000
+            conn = (URL(url).openConnection(proxy) as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 8000
+                // CRITICAL: never reuse a pooled keep-alive connection — it may
+                // still be bound to the OLD tunnel after a node switch.
+                setRequestProperty("Connection", "close")
                 setRequestProperty("User-Agent", "CianCore/1.0")
+                // Disable transparent response caching for this call.
+                useCaches = false
             }
-            try {
-                if (conn.responseCode !in 200..299) return null
-                val body = conn.inputStream.bufferedReader().readText().trim()
-                val ip = extractIp(body) ?: return null
-                IpInfo(ip, ip.contains(":"))
-            } finally {
-                conn.disconnect()
-            }
+            if (conn.responseCode !in 200..299) return null
+            val body = conn.inputStream.bufferedReader().readText().trim()
+            extractIp(body)
         } catch (_: Throwable) {
             null
+        } finally {
+            try { conn?.disconnect() } catch (_: Throwable) { }
         }
     }
 
