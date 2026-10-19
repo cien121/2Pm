@@ -33,10 +33,10 @@ class SingBoxHelperService : Service() {
             configJson: String?,
             tunFdPfd: ParcelFileDescriptor?,
             callback: ISingBoxCallback?
-        ): Int {
+        ): String? {
             return try {
-                if (configJson.isNullOrEmpty()) return 1
-                if (tunFdPfd == null) return 2
+                if (configJson.isNullOrEmpty()) return "empty config"
+                if (tunFdPfd == null) return "null tunFd"
                 // Detach fd; Go dups it
                 tunFd = tunFdPfd.detachFd()
                 Log.i(TAG, "start: got tunFd=$tunFd")
@@ -55,16 +55,17 @@ class SingBoxHelperService : Service() {
                 )
                 val c = SingBoxCore(applicationContext, platform)
                 val result = c.start(configJson)
-                result.onFailure { e ->
-                    Log.e(TAG, "sing-box start failed", e)
-                    return 3
+                val err = result.exceptionOrNull()
+                if (err != null) {
+                    Log.e(TAG, "sing-box start failed", err)
+                    return "start failed: ${err.message} (${err.javaClass.simpleName})"
                 }
                 core = c
                 Log.i(TAG, "sing-box started")
-                0
+                null // success
             } catch (t: Throwable) {
                 Log.e(TAG, "start failed", t)
-                4
+                "exception: ${t.message} (${t.javaClass.simpleName})"
             }
         }
 

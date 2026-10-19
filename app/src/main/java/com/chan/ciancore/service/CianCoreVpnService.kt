@@ -253,13 +253,14 @@ class CianCoreVpnService : VpnService() {
         // 2. Bind to :singbox process service
         val svc = bindSingBoxService()
         // 3. Start sing-box via AIDL (pass PFD; Go dups the fd)
-        val code = try {
+        // Returns null on success, error message on failure.
+        val errMsg: String? = try {
             svc.start(configJson, pfd, singBoxCallback)
         } catch (t: Throwable) {
-            throw IllegalStateException("sing-box 启动失败: ${t.message}")
+            throw IllegalStateException("sing-box 启动失败: ${t.javaClass.simpleName}: ${t.message}")
         }
-        if (code != 0) {
-            throw IllegalStateException("sing-box 启动失败 (code=$code)")
+        if (errMsg != null) {
+            throw IllegalStateException("sing-box 启动失败: $errMsg")
         }
         // Mark active (for stop path, we use AIDL not ProxyCore)
         activeCoreType = CoreType.SING_BOX

@@ -11,9 +11,9 @@ interface ISingBoxService {
     /**
      * Start sing-box with given config. tunFd is the TUN ParcelFileDescriptor
      * (fd detached and dup'd by Go side). callback for protect() etc.
-     * Returns 0 on success, non-zero error code otherwise.
+     * Returns null on success, error message on failure.
      */
-    int start(in String configJson, in ParcelFileDescriptor tunFd, in ISingBoxCallback callback);
+    String start(in String configJson, in ParcelFileDescriptor tunFd, in ISingBoxCallback callback);
 
     /** Stop sing-box. */
     void stop();
