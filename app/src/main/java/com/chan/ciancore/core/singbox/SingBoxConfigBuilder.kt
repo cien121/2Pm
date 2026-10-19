@@ -27,7 +27,7 @@ object SingBoxConfigBuilder {
             put("mtu", 9000)
             // sing-box >= 1.12: use "address" (legacy inet4_address/inet6_address removed)
             put("address", JSONArray().put("172.19.0.1/30").put("fd00::1/126"))
-            put("stack", "system")
+            put("stack", "gvisor")
             put("auto_route", false)
             put("strict_route", false)
             // sniff moved to route rule action (legacy inbound sniff removed in 1.13)
