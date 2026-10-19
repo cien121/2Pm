@@ -61,17 +61,22 @@ object SingBoxConfigBuilder {
         }
         config.put("route", route)
 
-        // ── DNS ──
+        // ── DNS (sing-box >= 1.14 new format) ──
         val dns = JSONObject().apply {
             val servers = JSONArray()
             servers.put(JSONObject().apply {
                 put("tag", "remote")
-                put("address", "https://1.1.1.1/dns-query")
+                put("type", "https")
+                put("server", "1.1.1.1")
+                put("server_port", 443)
+                put("path", "/dns-query")
                 put("detour", "proxy")
             })
             servers.put(JSONObject().apply {
                 put("tag", "local")
-                put("address", "223.5.5.5")
+                put("type", "udp")
+                put("server", "223.5.5.5")
+                put("server_port", 53)
                 put("detour", "direct")
             })
             put("servers", servers)
