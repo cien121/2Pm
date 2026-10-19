@@ -14,20 +14,21 @@ import org.json.JSONObject
  */
 object SingBoxConfigBuilder {
 
-    fun build(node: Node): String {
+    fun build(node: Node, tunAddress: String = "10.8.0.2"): String {
         val config = JSONObject()
 
         // ── TUN inbound ──
         // libbox calls PlatformInterface.openTun() when this inbound starts.
         // Keep it minimal: App builds the TUN via VpnService.Builder in openTun().
+        // The address MUST match what the App assigns via VpnService.Builder.
         val tunInbound = JSONObject().apply {
             put("type", "tun")
             put("tag", "tun-in")
             put("interface_name", "tun0")
             put("mtu", 9000)
-            // sing-box >= 1.12: use "address" (legacy inet4_address/inet6_address removed)
-            put("address", JSONArray().put("172.19.0.1/30").put("fd00::1/126"))
-            put("stack", "gvisor")
+            // Must match the address assigned by VpnService.Builder in openTun()
+            put("address", JSONArray().put("$tunAddress/32"))
+            put("stack", "system")
             put("auto_route", false)
             put("strict_route", false)
             // sniff moved to route rule action (legacy inbound sniff removed in 1.13)

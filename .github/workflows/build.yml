@@ -55,7 +55,6 @@ jobs:
           gomobile bind \
             -androidapi 24 \
             -trimpath \
-            -tags with_gvisor \
             -ldflags='-s -w -buildid= -checklinkname=0' \
             -o /tmp/libbox.aar \
             ./experimental/libbox

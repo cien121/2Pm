@@ -195,7 +195,9 @@ class CianCoreVpnService : VpnService() {
 
     /** sing-box connection path via libbox CommandServer. */
     private suspend fun connectSingBox(node: com.chan.ciancore.data.Node) {
-        val configJson = com.chan.ciancore.core.singbox.SingBoxConfigBuilder.build(node)
+        // The TUN address in sing-box config must match what VpnService.Builder assigns
+        val tunAddr = try { vpnAddress } catch (_: Throwable) { "10.8.0.2" }
+        val configJson = com.chan.ciancore.core.singbox.SingBoxConfigBuilder.build(node, tunAddr)
 
         // PlatformInterface: libbox calls openTun() when TUN inbound starts.
         // We build the TUN via VpnService.Builder and return the detached fd.
