@@ -1,6 +1,7 @@
 package com.chan.ciancore.ui.screens
 
 import android.content.Intent
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
