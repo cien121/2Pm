@@ -82,6 +82,10 @@ object SingBoxConfigBuilder {
             put("server", node.host)
             put("server_port", node.port)
             put("password", node.password)
+            // Session pool defaults (avoid zero-value issues)
+            put("idle_session_check_interval", "30s")
+            put("idle_session_timeout", "30s")
+            put("min_idle_session", 0)
             put("tls", JSONObject().apply {
                 put("enabled", true)
                 put("server_name", node.sni.ifBlank { node.host })
