@@ -19,17 +19,16 @@ object SingBoxConfigBuilder {
 
         // ── TUN inbound ──
         // libbox calls PlatformInterface.openTun() when this inbound starts.
+        // Keep it minimal: App builds the TUN via VpnService.Builder in openTun().
         val tunInbound = JSONObject().apply {
             put("type", "tun")
             put("tag", "tun-in")
             put("interface_name", "tun0")
             put("mtu", 9000)
-            put("gso", false)
             put("inet4_address", JSONArray().put("172.19.0.1/30"))
-            put("inet6_address", JSONArray().put("fd00::1/126"))
-            put("auto_route", true)
+            put("stack", "system")
+            put("auto_route", false)
             put("strict_route", false)
-            put("stack", "gvisor")
             put("sniff", true)
         }
         config.put("inbounds", JSONArray().put(tunInbound))
