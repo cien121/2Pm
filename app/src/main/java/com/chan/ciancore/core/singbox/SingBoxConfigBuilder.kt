@@ -30,7 +30,7 @@ object SingBoxConfigBuilder {
             put("stack", "system")
             put("auto_route", false)
             put("strict_route", false)
-            put("sniff", true)
+            // sniff moved to route rule action (legacy inbound sniff removed in 1.13)
         }
         config.put("inbounds", JSONArray().put(tunInbound))
 
@@ -54,6 +54,10 @@ object SingBoxConfigBuilder {
             rules.put(JSONObject().apply {
                 put("protocol", "dns")
                 put("outbound", "direct")
+            })
+            // Sniff (migrated from legacy inbound sniff field)
+            rules.put(JSONObject().apply {
+                put("action", "sniff")
             })
             put("rules", rules)
             put("final", "proxy")
