@@ -159,18 +159,13 @@ fun SettingsScreen(onNavigate: (String) -> Unit = {}) {
                     onClick = { onNavigate("routing") }
                 )
                 SettingsRow(
-                    title = "⛓️ 链式代理",
-                    value = chainNodeName ?: "未启用",
-                    onClick = { showChainPicker = true }
-                )
-                SettingsRow(
                     title = "DNS 与网络",
                     value = "DNS / 测速 / VPN 参数",
                     onClick = { onNavigate("dns") }
                 )
                 SettingsRow(
                     title = "Geo 资源",
-                    value = if (geoBusy) (geoProgress ?: "更新中…") else (geoStatus ?: "已内置，点击更新"),
+                    value = if (geoBusy) (geoProgress ?: "更新中…") else (geoStatus ?: "点击更新"),
                     onClick = {
                         if (geoBusy) return@SettingsRow
                         geoBusy = true
