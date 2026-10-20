@@ -673,6 +673,12 @@ object XrayConfigBuilder {
                 if (n.seed.isNotBlank()) kcp.put("seed", n.seed)
                 ss.put("kcpSettings", kcp)
             }
+            "mist" -> {
+                val mist = JSONObject()
+                if (n.mistClientId.isNotBlank()) mist.put("clientId", n.mistClientId)
+                if (n.mistAuthKey.isNotBlank()) mist.put("authKey", n.mistAuthKey)
+                ss.put("mistSettings", mist)
+            }
         }
         if (n.security == "tls" || n.security == "reality") {
             ss.put("security", n.security)

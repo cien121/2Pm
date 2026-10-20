@@ -41,7 +41,7 @@ data class Node(
     val method: String = "",
     /** XTLS flow (vless/trojan), e.g. xtls-rprx-vision */
     val flow: String = "",
-    /** Transport: tcp, ws, grpc, h2, httpupgrade, xhttp, kcp */
+    /** Transport: tcp, ws, grpc, h2, httpupgrade, xhttp, kcp, mist */
     val network: String = "tcp",
     /** Stream security: "", "tls", "reality" */
     val security: String = "",
@@ -87,6 +87,10 @@ data class Node(
     val xhttpMode: String = "",
     /** XHTTP extra raw JSON (advanced) */
     val xhttpExtra: String = "",
+    /** Mist transport client ID (16 bytes hex) for VLESS-over-Mist */
+    val mistClientId: String = "",
+    /** Mist transport auth key (32 bytes base64) for VLESS-over-Mist */
+    val mistAuthKey: String = "",
     /** FinalMask raw JSON override (advanced); replaces structured builder output */
     val finalMaskJson: String = "",
     /** TLS ECH config list */

@@ -701,6 +701,8 @@ private fun EditNodeDialog(
     var hopInterval by remember(key) { mutableStateOf(node.hopInterval) }
     var xhttpMode by remember(key) { mutableStateOf(node.xhttpMode) }
     var xhttpExtra by remember(key) { mutableStateOf(node.xhttpExtra) }
+    var mistClientId by remember(key) { mutableStateOf(node.mistClientId) }
+    var mistAuthKey by remember(key) { mutableStateOf(node.mistAuthKey) }
     var finalMaskJson by remember(key) { mutableStateOf(node.finalMaskJson) }
     var echConfigList by remember(key) { mutableStateOf(node.echConfigList) }
     var peerCertSha256 by remember(key) { mutableStateOf(node.peerCertSha256) }
@@ -785,7 +787,7 @@ private fun EditNodeDialog(
                     EditSection("传输设置")
                     EditChips(
                         "传输协议",
-                        listOf("tcp", "ws", "xhttp", "grpc", "httpupgrade", "kcp", "h2"),
+                        listOf("tcp", "ws", "xhttp", "grpc", "httpupgrade", "kcp", "h2", "mist"),
                         network, onSelect = { network = it }
                     )
                     EditChipsPairs(
@@ -809,6 +811,12 @@ private fun EditNodeDialog(
                         )
                         EditField("XHTTP Extra 原始 JSON（可空）", xhttpExtra,
                             onChange = { xhttpExtra = it })
+                    }
+                    if (network == "mist") {
+                        EditField("Mist Client ID（16 字节 hex）", mistClientId,
+                            onChange = { mistClientId = it })
+                        EditField("Mist Auth Key（32 字节 base64）", mistAuthKey,
+                            onChange = { mistAuthKey = it })
                     }
                     if (network == "grpc") {
                         EditField("服务名", serviceName, onChange = { serviceName = it })
@@ -911,6 +919,7 @@ private fun EditNodeDialog(
                             obfsPassword = obfsPassword, portHopping = portHopping,
                             hopInterval = hopInterval,
                             xhttpMode = xhttpMode, xhttpExtra = xhttpExtra,
+                            mistClientId = mistClientId, mistAuthKey = mistAuthKey,
                             finalMaskJson = finalMaskJson,
                             echConfigList = echConfigList,
                             peerCertSha256 = peerCertSha256,
