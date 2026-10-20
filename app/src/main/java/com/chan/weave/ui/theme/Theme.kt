@@ -8,27 +8,28 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * Weave design system — "Deep Sea".
+ * Weave design system — "Obsidian Gold".
  *
- * Deep ocean-blue canvas, sea-blue accents. Dark-first.
+ * Near-black canvas, gold accents. Premium, calm, distinctive.
+ * Dark-first.
  */
 
 // ── Palette ──────────────────────────────────────────────────────────
-val NightCanvas = Color(0xFF071120)      // app background (deep sea)
-val NightSurface = Color(0xFF0E1E33)    // cards
-val NightSurfaceHigh = Color(0xFF15294A)
+val NightCanvas = Color(0xFF0B0B0D)      // app background (obsidian)
+val NightSurface = Color(0xFF141417)    // cards
+val NightSurfaceHigh = Color(0xFF1D1D21)
 val NightOutline = Color(0x26FFFFFF)    // 15% white hairlines
 
-val AuroraCyan = Color(0xFF38BDF8)      // primary: sky blue
-val AuroraViolet = Color(0xFF0EA5E9)    // secondary: ocean blue
-val AuroraMagenta = Color(0xFF22D3EE)   // tertiary: aqua
+val AuroraCyan = Color(0xFFD4A853)      // primary: gold
+val AuroraViolet = Color(0xFFB8860B)    // secondary: dark gold
+val AuroraMagenta = Color(0xFFF0D090)   // tertiary: light gold
 
-val InkPrimary = Color(0xFFE8F1FA)
-val InkSecondary = Color(0xFF8BA3BD)
-val InkTertiary = Color(0xFF5A6F8A)
+val InkPrimary = Color(0xFFF5F0E6)
+val InkSecondary = Color(0xFFA89F8D)
+val InkTertiary = Color(0xFF6B655A)
 
-val SignalUp = Color(0xFF34D399)
-val SignalDown = Color(0xFF60A5FA)
+val SignalUp = Color(0xFF4ADE80)
+val SignalDown = Color(0xFFD4A853)
 val SignalWarn = Color(0xFFFFB545)
 val SignalError = Color(0xFFFF6B6B)
 
