@@ -509,13 +509,7 @@ object XrayConfigBuilder {
         if (upBw.isNotBlank()) settings.put("upmbps", upBw)
         val downBw = normalizeBandwidth(n.bandwidthDown)
         if (downBw.isNotBlank()) settings.put("downmbps", downBw)
-        if (n.portHopping.isNotBlank()) {
-            quicParams.put(
-                "udpHop", JSONObject()
-                    .put("ports", n.portHopping)
-                    .put("interval", n.hopInterval.ifBlank { "30" })
-            )
-        }
+        // 端口跳跃 Xray 原生不支持，已移除 (对标 v2rayNG)
         // 标准 Xray Hy2: 不用 finalmask 非标扩展
         // 端口跳跃 (mport) Xray 原生不支持，忽略，只连主端口 (对标 v2rayNG)
         if (n.obfsPassword.isNotBlank()) {
