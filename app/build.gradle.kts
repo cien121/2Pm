@@ -70,6 +70,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Exclude geo files bundled in the Xray AAR; app downloads them on demand.
+            excludes += "assets/geoip.dat"
+            excludes += "assets/geosite.dat"
         }
     }
     // (ndk abiFilters live inside defaultConfig)
