@@ -205,9 +205,13 @@ class CianCoreVpnService : VpnService() {
                 } catch (_: Throwable) {
                 }
             }
-        builder
-            .addRoute("0.0.0.0", 0)
-            .addDisallowedApplication(packageName)
+        val perAppMode = com.chan.weave.data.PerAppPrefs.getMode(this)
+        builder.addRoute("0.0.0.0", 0)
+        // 注意: addDisallowedApplication 和 addAllowedApplication 不能混用
+        // 白名单模式下只用 addAllowedApplication，不加黑名单
+        if (perAppMode != com.chan.weave.data.PerAppPrefs.Mode.ALLOWLIST) {
+            builder.addDisallowedApplication(packageName)
+        }
         if (ipv6Enabled) {
             try {
                 builder.addRoute("::", 0)
