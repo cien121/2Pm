@@ -31,8 +31,15 @@ object GeoManager {
     fun geoipFile(context: Context): File = File(assetDir(context), "geoip.dat")
     fun geositeFile(context: Context): File = File(assetDir(context), "geosite.dat")
 
+    // Real geo files are several MB; anything at/below 100 KB is a
+    // placeholder (the APK ships 0-byte assets to shadow the AAR's copies)
+    // or a corrupt download and must NOT count as ready.
+    private const val MIN_GEO_BYTES = 100 * 1024L
+
+    private fun isUsable(f: File): Boolean = f.exists() && f.length() > MIN_GEO_BYTES
+
     fun isReady(context: Context): Boolean =
-        geoipFile(context).exists() && geositeFile(context).exists()
+        isUsable(geoipFile(context)) && isUsable(geositeFile(context))
 
     /** Copy bundled assets into the Xray dir if missing. */
     suspend fun ensureBundled(context: Context): Unit = withContext(Dispatchers.IO) {
@@ -54,10 +61,21 @@ object GeoManager {
     }
 
     private fun copyAsset(context: Context, assetName: String, dest: File) {
-        if (dest.exists() && dest.length() > 0) return
+        if (isUsable(dest)) return
+        // Drop any placeholder/corrupt copy so a failed copy below
+        // doesn't leave a 0-byte file masquerading as a real one.
+        if (dest.exists()) dest.delete()
         try {
+            val tmp = File(dest.parent, dest.name + ".asset.tmp")
             context.assets.open(assetName).use { input ->
-                dest.outputStream().use { output -> input.copyTo(output) }
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (isUsable(tmp)) {
+                tmp.renameTo(dest)
+            } else {
+                // Bundled asset is a 0-byte placeholder; leave dest absent
+                // so ensureAvailable() proceeds to download the real file.
+                tmp.delete()
             }
         } catch (_: Throwable) {
             // Asset may be missing in dev builds; update can fetch it later.
