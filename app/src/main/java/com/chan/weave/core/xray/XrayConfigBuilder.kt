@@ -504,17 +504,12 @@ object XrayConfigBuilder {
                     .put("version", 2)
                     .put("auth", n.uuid)
             )
-        val quicParams = JSONObject()
+        // 标准 Xray Hy2: upmbps/downmbps 放 settings (如 "50 mbps")，不用 brutal
         val upBw = normalizeBandwidth(n.bandwidthUp)
-        if (upBw.isNotBlank()) {
-            quicParams.put("brutalUp", upBw)
-            quicParams.put("congestion", "brutal")
-        }
+        if (upBw.isNotBlank()) settings.put("upmbps", upBw)
         val downBw = normalizeBandwidth(n.bandwidthDown)
-        if (downBw.isNotBlank()) {
-            quicParams.put("brutalDown", downBw)
-            quicParams.put("congestion", "brutal")
-        }
+        if (downBw.isNotBlank()) settings.put("downmbps", downBw)
+        val quicParams = JSONObject()
         if (n.portHopping.isNotBlank()) {
             quicParams.put(
                 "udpHop", JSONObject()
@@ -599,6 +594,7 @@ object XrayConfigBuilder {
         val t = raw.trim().lowercase()
         if (t.isEmpty()) return ""
         if (t.matches(Regex("[0-9.]+"))) return "$t mbps"
+        if (t.endsWith("mbs")) return t.dropLast(3) + "mbps"
         return t
     }
 
