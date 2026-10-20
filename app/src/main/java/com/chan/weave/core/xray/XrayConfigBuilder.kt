@@ -572,16 +572,18 @@ object XrayConfigBuilder {
             .put("authKey", n.password.trim())
             .put("heartbeatInterval", 30)
             .put("shapingHeavyPackets", 32)
+        val tlsSettings = JSONObject()
+            .put("serverName", sni)
+            .put("fingerprint", "hellochrome_155")
+            .put("alpn", JSONArray().put("h2").put("http/1.1"))
+            .put("allowInsecure", false)
+        if (n.echConfigList.isNotBlank()) {
+            tlsSettings.put("echConfigList", n.echConfigList.trim())
+        }
         val stream = JSONObject()
             .put("network", "tcp")
             .put("security", "tls")
-            .put(
-                "tlsSettings", JSONObject()
-                    .put("serverName", sni)
-                    .put("fingerprint", "hellochrome_155")
-                    .put("alpn", JSONArray().put("h2").put("http/1.1"))
-                    .put("allowInsecure", false)
-            )
+            .put("tlsSettings", tlsSettings)
         return JSONObject()
             .put("tag", "proxy")
             .put("protocol", "mist")
@@ -672,12 +674,6 @@ object XrayConfigBuilder {
                     .put("header", JSONObject().put("type", n.headerType.ifEmpty { "none" }))
                 if (n.seed.isNotBlank()) kcp.put("seed", n.seed)
                 ss.put("kcpSettings", kcp)
-            }
-            "mist" -> {
-                val mist = JSONObject()
-                if (n.mistClientId.isNotBlank()) mist.put("clientId", n.mistClientId)
-                if (n.mistAuthKey.isNotBlank()) mist.put("authKey", n.mistAuthKey)
-                ss.put("mistSettings", mist)
             }
         }
         if (n.security == "tls" || n.security == "reality") {
