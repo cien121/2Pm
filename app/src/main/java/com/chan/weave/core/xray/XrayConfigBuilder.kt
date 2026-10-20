@@ -509,7 +509,6 @@ object XrayConfigBuilder {
         if (upBw.isNotBlank()) settings.put("upmbps", upBw)
         val downBw = normalizeBandwidth(n.bandwidthDown)
         if (downBw.isNotBlank()) settings.put("downmbps", downBw)
-        val quicParams = JSONObject()
         if (n.portHopping.isNotBlank()) {
             quicParams.put(
                 "udpHop", JSONObject()
@@ -517,26 +516,10 @@ object XrayConfigBuilder {
                     .put("interval", n.hopInterval.ifBlank { "30" })
             )
         }
-        // Raw FinalMask JSON overrides the structured builder output.
-        val rawFinalMask = n.finalMaskJson.trim().takeIf { it.isNotBlank() }
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
-        if (rawFinalMask != null) {
-            stream.put("finalmask", rawFinalMask)
-        } else {
-            val finalmask = JSONObject().put("quicParams", quicParams)
-            if (n.obfsPassword.isNotBlank()) {
-                finalmask.put(
-                    "udp", JSONArray().put(
-                        JSONObject()
-                            .put("type", "salamander")
-                            .put(
-                                "settings", JSONObject()
-                                    .put("password", n.obfsPassword)
-                            )
-                    )
-                )
-            }
-            stream.put("finalmask", finalmask)
+        // 标准 Xray Hy2: 不用 finalmask 非标扩展
+        // 端口跳跃 (mport) Xray 原生不支持，忽略，只连主端口 (对标 v2rayNG)
+        if (n.obfsPassword.isNotBlank()) {
+            // obfs 密码放 streamSettings 的 hysteriaSettings? 暂不支持，先忽略
         }
         return JSONObject()
             .put("tag", "proxy")
