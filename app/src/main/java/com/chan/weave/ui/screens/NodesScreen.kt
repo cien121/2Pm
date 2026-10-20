@@ -922,7 +922,7 @@ private fun ChainNodePickerDialog(
     onPick: (List<Node>) -> Unit,
     vm: MainViewModel
 ) {
-    var selectedIds by remember { mutableStateOf<MutableList<Long>>(mutableListOf()) }
+    var selectedIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("⛓️ 链式代理", color = InkPrimary) },
@@ -959,8 +959,7 @@ private fun ChainNodePickerDialog(
                                 RoundedCornerShape(10.dp)
                             )
                             .combinedClickable(onClick = {
-                                if (selected) selectedIds.remove(node.id)
-                                else selectedIds.add(node.id)
+                                selectedIds = if (selected) selectedIds - node.id else selectedIds + node.id
                             })
                             .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
