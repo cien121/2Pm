@@ -150,6 +150,16 @@ class CianCoreVpnService : VpnService() {
             if (members.isEmpty()) {
                 throw IllegalStateException("链式节点没有可用成员")
             }
+            // Fail LOUDLY when a stored member id no longer resolves:
+            // a member node was deleted and re-added (new id) or removed.
+            // Silently connecting a partial chain degrades it to a direct
+            // connection to the exit node, which for exits that only accept
+            // chained traffic looks like "connected but nothing loads".
+            if (members.size < ids.size) {
+                throw IllegalStateException(
+                    "链式成员已失效（有节点被删除或重新添加过），请删除这个链式节点后重新创建"
+                )
+            }
             members.last() to members.dropLast(1).reversed()
         } else {
             node to resolveChainNodes(node.id)
@@ -163,6 +173,7 @@ class CianCoreVpnService : VpnService() {
                 directDns = directDns,
                 fakeDns = fakeDns,
                 chainNodes = chainMembers,
+                strictChain = node.protocol == "proxychain",
                 muxEnabled = com.chan.weave.data.StreamPrefs.isMuxEnabled(this),
                 muxConcurrency = com.chan.weave.data.StreamPrefs.getMuxConcurrency(this),
                 fragmentEnabled = com.chan.weave.data.StreamPrefs.isFragmentEnabled(this),

@@ -34,6 +34,13 @@ object XrayConfigBuilder {
         val chainNodes: List<Node> = emptyList(),
         /** @deprecated Use chainNodes instead. */
         val chainNode: Node? = null,
+        /**
+         * When true (proxychain virtual nodes), a chain member whose
+         * outbound fails to build aborts the whole config with an error
+         * instead of being silently dropped (which would degrade the
+         * chain into a direct connection to the exit node).
+         */
+        val strictChain: Boolean = false,
         // Mux (multiplexing)
         val muxEnabled: Boolean = false,
         val muxConcurrency: Int = 8,
@@ -85,6 +92,8 @@ object XrayConfigBuilder {
                 if (outbound != null) {
                     outbounds.put(outbound)
                     chainTags.add(tag)
+                } else if (options.strictChain) {
+                    throw IllegalStateException("链式成员配置生成失败：${chainNode.name}")
                 }
             }
             // Link them: main → chain0 → chain1 → ... (last has no dialerProxy)
