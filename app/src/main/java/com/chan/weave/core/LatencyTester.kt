@@ -47,7 +47,18 @@ object LatencyTester {
         withContext(Dispatchers.IO) {
             try {
                 if (node.coreType != CoreType.XRAY) return@withContext -1L
-                val config = XrayConfigBuilder.buildOutboundTest(node)
+                val config = if (node.protocol == "proxychain") {
+                    // Resolve chain members from the DB and build a chain test config.
+                    val ids = node.rawLink.removePrefix("proxychain:").trim()
+                        .split(",").mapNotNull { it.toLongOrNull() }
+                    val dao = com.chan.weave.CianCoreApp.instance.database.nodeDao()
+                    val members = ids.mapNotNull { runCatching { dao.getById(it) }.getOrNull() }
+                        .filter { it.protocol != "proxychain" }
+                    if (members.isEmpty()) return@withContext -1L
+                    XrayConfigBuilder.buildChainTest(members)
+                } else {
+                    XrayConfigBuilder.buildOutboundTest(node)
+                }
                 val url = context.testUrl.ifBlank { XrayCore.DELAY_TEST_URL }
                 XrayCore(context.applicationContext).measureLatency(config, url)
             } catch (_: Throwable) {

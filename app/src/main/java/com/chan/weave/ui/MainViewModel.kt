@@ -63,10 +63,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 when (node?.protocol?.lowercase()) {
                     "hysteria2", "socks" -> false
                     "proxychain" -> {
-                        // For chain, use first member's protocol
+                        // For chain, use the LAST member (exit)'s protocol
                         val ids = getChainMemberIds(node)
-                        val first = ids.firstOrNull()?.let { runCatching { dao.getById(it) }.getOrNull() }
-                        when (first?.protocol?.lowercase()) {
+                        val last = ids.lastOrNull()?.let { runCatching { dao.getById(it) }.getOrNull() }
+                        when (last?.protocol?.lowercase()) {
                             "hysteria2", "socks" -> false
                             else -> true
                         }

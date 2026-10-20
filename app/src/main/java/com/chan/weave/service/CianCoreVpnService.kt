@@ -137,8 +137,10 @@ class CianCoreVpnService : VpnService() {
 
     /** Xray connection path (existing logic). */
     private suspend fun connectXray(node: com.chan.weave.data.Node) {
-        // Proxychain virtual node: members are stored as IDs in rawLink.
-        // The first member acts as the main outbound, rest are chain.
+        // Proxychain virtual node: members are stored as IDs in rawLink,
+        // in display order [M1, M2, ..., Mn] = traffic flow direction.
+        // Mn (last) is the EXIT = main outbound; preceding members are
+        // front proxies, passed in reverse (Mn-1 first).
         val (effectiveNode, chainMembers) = if (node.protocol == "proxychain") {
             val ids = node.rawLink.removePrefix("proxychain:").trim()
                 .split(",").mapNotNull { it.toLongOrNull() }
@@ -148,8 +150,7 @@ class CianCoreVpnService : VpnService() {
             if (members.isEmpty()) {
                 throw IllegalStateException("链式节点没有可用成员")
             }
-            // First member is main, rest are chain
-            members[0] to members.drop(1)
+            members.last() to members.dropLast(1).reversed()
         } else {
             node to resolveChainNodes(node.id)
         }

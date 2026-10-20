@@ -145,6 +145,39 @@ object XrayConfigBuilder {
         return config.toString()
     }
 
+    /**
+     * Test config for a proxychain: [membersInFlowOrder] = [M1, ..., Mn],
+     * Mn is the exit (main outbound), preceding members are fronts in reverse.
+     */
+    fun buildChainTest(membersInFlowOrder: List<Node>): String {
+        if (membersInFlowOrder.isEmpty()) throw IllegalArgumentException("empty chain")
+        val exit = membersInFlowOrder.last()
+        val frontsReversed = membersInFlowOrder.dropLast(1).reversed()
+        val config = JSONObject()
+        config.put("log", JSONObject().put("loglevel", "warning"))
+        val outbounds = JSONArray()
+        val mainOutbound = buildOutbound(exit, "proxy")
+        outbounds.put(mainOutbound)
+        val chainTags = mutableListOf<String>()
+        frontsReversed.forEachIndexed { index, front ->
+            val tag = "chain$index"
+            outbounds.put(buildOutbound(front, tag))
+            chainTags.add(tag)
+        }
+        if (chainTags.isNotEmpty()) {
+            setDialerProxy(mainOutbound, chainTags[0])
+            for (i in 0 until chainTags.size - 1) {
+                val ob = (0 until outbounds.length())
+                    .map { outbounds.getJSONObject(it) }
+                    .firstOrNull { it.optString("tag") == chainTags[i] }
+                if (ob != null) setDialerProxy(ob, chainTags[i + 1])
+            }
+        }
+        outbounds.put(directOutbound())
+        config.put("outbounds", outbounds)
+        return config.toString()
+    }
+
     /** The single "proxy" outbound for [node]. */
     fun buildOutbound(node: Node, tag: String = "proxy", opts: BuildOptions = BuildOptions()): JSONObject {
         val ob = when (node.protocol.lowercase()) {
