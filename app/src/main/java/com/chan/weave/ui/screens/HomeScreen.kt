@@ -82,7 +82,7 @@ fun HomeScreen(
         ) {
             // Brand + status line
             Text(
-                text = "CianCore",
+                text = "Weave",
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Black,
                 color = InkPrimary,
