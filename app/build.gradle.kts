@@ -70,9 +70,24 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            // Exclude geo files bundled in the Xray AAR; app downloads them on demand.
-            excludes += "assets/geoip.dat"
-            excludes += "assets/geosite.dat"
+        }
+    }
+    // Remove geo.dat files bundled in the Xray AAR; app downloads them on demand.
+    // (packaging.resources.excludes doesn't cover AAR assets, so delete after merge.)
+    tasks.configureEach {
+        if (name.startsWith("merge") && name.contains("Assets")) {
+            doLast {
+                val assetsDir = file("$buildDir/intermediates/merged_assets")
+                if (assetsDir.exists()) {
+                    assetsDir.walkTopDown().forEach { f ->
+                        if (f.isFile && (f.name == "geoip.dat" || f.name == "geosite.dat")) {
+                            // Keep geoip-only-cn-private.dat (small, useful fallback)
+                            f.delete()
+                            println("Removed bundled ${f.name} for slim APK")
+                        }
+                    }
+                }
+            }
         }
     }
     // (ndk abiFilters live inside defaultConfig)
