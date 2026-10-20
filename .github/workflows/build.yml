@@ -38,8 +38,16 @@ jobs:
           mkdir -p app/libs
           # Official build from 2dust/AndroidLibXrayLite — do NOT substitute
           # with a self-built AAR (known 6x latency regression, 2026-10-17).
+          #
+          # The mist-branch AAR below is the ONLY sanctioned exception: it
+          # replicates the 2dust official flow verbatim (ubuntu-latest,
+          # Go 1.27, NDK r29, androidapi 24, identical ldflags; workflow
+          # run 39406837474) with the mist branch sources (proxy/mist
+          # native outbound + uTLS hellochrome_155), and is published as a
+          # permanent release asset so builds don't depend on the 7-day
+          # artifact expiry.
           curl -fSL -o app/libs/libv2ray.aar \
-            https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.10.10/libv2ray.aar
+            https://github.com/cien121/xray-core/releases/download/mist-v0.1/libv2ray.aar
           ls -lh app/libs/libv2ray.aar
 
       - name: Restore fixed debug keystore

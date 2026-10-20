@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chan.weave.data.Node
 import com.chan.weave.data.NodeLinkGenerator
+import com.chan.weave.data.NodeLinkParser
 import com.chan.weave.data.SubscriptionManager
 import com.chan.weave.data.ChainPrefs.chainNodeId
 import com.chan.weave.ui.MainViewModel
@@ -463,6 +464,7 @@ private fun AddNodeDialog(
         "socks" to "SOCKS",
         "http" to "HTTP",
         "hysteria2" to "Hysteria2",
+        "mist" to "🌫️ Mist",
         "proxychain" to "⛓️ 链式代理"
     )
 
@@ -707,6 +709,7 @@ private fun EditNodeDialog(
     var error by remember(key) { mutableStateOf<String?>(null) }
 
     val isHy2 = proto == "hysteria2" || proto == "hy2"
+    val isMist = proto == "mist"
     val isStream = proto == "vless" || proto == "vmess" || proto == "trojan"
     val showTls = security == "tls" || proto == "trojan" || isHy2
     val showReality = security == "reality"
@@ -751,6 +754,12 @@ private fun EditNodeDialog(
                         EditField("UUID", uuid, onChange = { uuid = it; error = null })
                         EditField("密码", password, onChange = { password = it })
                     }
+                    "mist" -> {
+                        EditField("Client ID（hex，32 字符）", uuid,
+                            onChange = { uuid = it; error = null })
+                        EditField("Auth Key（标准 base64，44 字符）", password,
+                            onChange = { password = it; error = null })
+                    }
                     "anytls" -> {
                         EditField("密码", password, onChange = { password = it; error = null })
                     }
@@ -759,6 +768,17 @@ private fun EditNodeDialog(
                         EditField("对端公钥", password, onChange = { password = it })
                     }
                     else -> EditField("认证密码", uuid, onChange = { uuid = it; error = null })
+                }
+
+                if (isMist) {
+                    EditSection("Mist 设置")
+                    Text(
+                        text = "传输固定 TCP+TLS，uTLS 指纹 hellochrome_155，证书校验开启",
+                        fontSize = 12.sp,
+                        color = InkSecondary
+                    )
+                    EditField("SNI（雾域名，可空，默认=服务器地址）", sni,
+                        onChange = { sni = it })
                 }
 
                 if (isStream) {
@@ -872,12 +892,17 @@ private fun EditNodeDialog(
                     p == null || p !in 1..65535 -> error = "端口无效（1-65535）"
                     uuid.isBlank() && proto != "socks" && proto != "socks5" ->
                         error = "认证信息不能为空"
+                    isMist && !NodeLinkParser.isValidMistClientId(uuid) ->
+                        error = "Client ID 必须为 32 个 hex 字符"
+                    isMist && !NodeLinkParser.isValidMistKey(password) ->
+                        error = "Auth Key 无效（应为 32 字节密钥的 base64 编码）"
                     showReality && pbk.isBlank() -> error = "Reality 公钥不能为空"
                     else -> onSave(
                         node.copy(
                             name = name.trim(), host = host.trim(), port = p,
                             uuid = uuid, password = password, method = method,
-                            flow = flow, network = network, security = security,
+                            flow = flow, network = if (isMist) "tcp" else network,
+                            security = if (isMist) "tls" else security,
                             sni = sni, alpn = alpn, fp = fp, pbk = pbk, sid = sid,
                             spx = spx, insecure = insecure, wsHost = wsHost,
                             wsPath = wsPath.ifBlank { "/" }, serviceName = serviceName,

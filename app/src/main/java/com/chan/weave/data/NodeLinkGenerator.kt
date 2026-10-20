@@ -20,6 +20,7 @@ object NodeLinkGenerator {
             "hysteria2", "hy2" -> genHysteria2(node)
             "socks", "socks5" -> genSocks(node)
             "http" -> genHttp(node)
+            "mist" -> genMist(node)
             else -> null
         }
     }.getOrNull()
@@ -151,5 +152,22 @@ object NodeLinkGenerator {
             "${enc(n.uuid)}$pass@"
         } else ""
         return "http://${auth}${n.host}:${n.port}#${enc(n.name)}"
+    }
+
+    /**
+     * mist:// 分享链接（v0.1）：
+     *   mist://<clientIdHex>@<address>:<port>?key=<base64url(authKey)>&sni=<雾域名>#<备注>
+     * Node.password 里存的是标准 base64，这里转成 base64url（无补齐）。
+     */
+    private fun genMist(n: Node): String {
+        val keyB64Url = runCatching {
+            val bytes = Base64.decode(n.password.trim(), Base64.DEFAULT)
+            require(bytes.size == 32)
+            Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        }.getOrElse { return@getOrElse "" }
+        require(keyB64Url.isNotEmpty()) { "mist 节点 Auth Key 无效，无法生成分享链接" }
+        val sni = n.sni.ifBlank { n.host }
+        return "mist://${n.uuid}@${n.host}:${n.port}" +
+                "?key=$keyB64Url&sni=${enc(sni)}#${enc(n.name)}"
     }
 }

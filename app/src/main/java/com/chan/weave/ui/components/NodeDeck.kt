@@ -173,6 +173,7 @@ private fun ProtocolBadge(protocol: String) {
     }
     val color = when (protocol.lowercase()) {
         "proxychain" -> Color(0xFFFF9800) // orange, like ng
+        "mist" -> AuroraMagenta // light champagne gold, fits Obsidian Gold theme
         else -> AuroraViolet
     }
     Box(

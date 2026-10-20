@@ -197,6 +197,7 @@ object XrayConfigBuilder {
             "socks", "socks5" -> socksOutbound(node, opts)
             "http" -> httpOutbound(node, opts)
             "hysteria2", "hy2" -> hysteria2Outbound(node, opts)
+            "mist" -> mistOutbound(node)
             "tuic" -> throw IllegalArgumentException("tuic 协议需要 sing-box 核心，当前版本暂不支持")
             else -> throw IllegalArgumentException("Xray 核心不支持协议：${node.protocol}")
         }
@@ -545,6 +546,45 @@ object XrayConfigBuilder {
         return JSONObject()
             .put("tag", "proxy")
             .put("protocol", "hysteria")
+            .put("settings", settings)
+            .put("streamSettings", stream)
+    }
+
+    /**
+     * Mist 自研协议原生出站（proxy/mist，Xray mist 分支）。
+     * 严格按 XRAY_INTEGRATION.md（~/workspace/xray-core/XRAY_INTEGRATION.md）生成：
+     * - Node.uuid = clientId（hex 32 字符），Node.password = authKey（标准 base64）
+     * - 传输固定：network tcp / security tls / fingerprint hellochrome_155 /
+     *   alpn h2+http/1.1 / allowInsecure=false（证书链必须校验）
+     * - SNI：Node.sni，默认 = host（雾域名）
+     */
+    private fun mistOutbound(n: Node): JSONObject {
+        require(n.uuid.trim().matches(Regex("[0-9a-fA-F]{32}"))) {
+            "mist 节点 Client ID 无效（应为 32 个 hex 字符）"
+        }
+        require(n.password.isNotBlank()) { "mist 节点缺少 Auth Key" }
+        val sni = n.sni.ifBlank { n.host }
+        require(sni.isNotBlank()) { "mist 节点缺少服务器地址" }
+        val settings = JSONObject()
+            .put("address", n.host)
+            .put("port", n.port)
+            .put("clientId", n.uuid.trim().lowercase())
+            .put("authKey", n.password.trim())
+            .put("heartbeatInterval", 30)
+            .put("shapingHeavyPackets", 32)
+        val stream = JSONObject()
+            .put("network", "tcp")
+            .put("security", "tls")
+            .put(
+                "tlsSettings", JSONObject()
+                    .put("serverName", sni)
+                    .put("fingerprint", "hellochrome_155")
+                    .put("alpn", JSONArray().put("h2").put("http/1.1"))
+                    .put("allowInsecure", false)
+            )
+        return JSONObject()
+            .put("tag", "proxy")
+            .put("protocol", "mist")
             .put("settings", settings)
             .put("streamSettings", stream)
     }

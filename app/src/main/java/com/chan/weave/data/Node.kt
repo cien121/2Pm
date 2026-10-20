@@ -9,13 +9,15 @@ import com.chan.weave.core.CoreType
  *
  * Protocol-specific fields cover the URI schemes parsed by
  * [NodeLinkParser]: vless, vmess, trojan, ss (shadowsocks),
- * hysteria2/hy2 and tuic. Fields that don't apply to a protocol
+ * hysteria2/hy2, tuic and mist. Fields that don't apply to a protocol
  * stay at their defaults.
  *
  * Identity mapping:
  * - vless / vmess: [uuid] = user id
  * - trojan / ss / hysteria2: [uuid] = password / auth string
  * - tuic: [uuid] + [password]
+ * - mist: [uuid] = clientId (hex, 32 chars), [password] = authKey
+ *   (standard base64, 44 chars); [sni] = 雾域名 (defaults to host)
  */
 @Entity(tableName = "nodes")
 data class Node(
@@ -25,7 +27,7 @@ data class Node(
     val name: String,
     /** Raw subscription / share link text */
     val rawLink: String,
-    /** Protocol: vless, vmess, trojan, ss, hysteria2, tuic */
+    /** Protocol: vless, vmess, trojan, ss, hysteria2, tuic, mist */
     val protocol: String = "",
     /** Server host */
     val host: String = "",

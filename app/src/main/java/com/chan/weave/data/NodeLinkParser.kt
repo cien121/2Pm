@@ -10,7 +10,7 @@ import java.net.URLDecoder
  * Share-link → [Node] parser.
  *
  * Supported schemes: vless://, vmess://, trojan://, ss://,
- * socks:// (socks5://), hysteria2:// (hy2://), tuic://.
+ * socks:// (socks5://), hysteria2:// (hy2://), tuic://, mist://.
  *
  * Query-parameter mapping follows the v2rayNG convention
  * (type/security/sni/fp/alpn/pbk/sid/spx/flow/insecure/...).
@@ -34,6 +34,7 @@ object NodeLinkParser {
             "http" -> parseHttp(link)
             "anytls" -> parseAnytls(link)
             "wireguard" -> parseWireguard(link)
+            "mist" -> parseMist(link)
             else -> throw IllegalArgumentException("不支持的协议：$scheme")
         }
     }
@@ -426,6 +427,68 @@ object NodeLinkParser {
             uuid = privateKey,
             password = publicKey,
             coreType = CoreType.SING_BOX
+        )
+    }
+
+    // ── mist (自研协议，原生 Xray 出站 proxy/mist) ──────────────────
+    //
+    // 分享链接格式（v0.1）：
+    //   mist://<clientIdHex>@<address>:<port>?key=<base64url(authKey)>&sni=<雾域名>#<备注>
+    // - clientIdHex: 16 字节 CID 的 hex 编码（32 个 hex 字符）
+    // - key: 32 字节 K_auth 的 base64url 编码（解析时也兼容标准 base64），
+    //   存入 Node.password 时统一转成标准 base64（44 字符，带 = 补齐）
+    // - sni: 雾域名，可空，默认与 address 一致
+    //
+    // 字段映射：address=host、port=port、uuid=clientId(hex)、
+    // password=authKey(标准 base64)、sni=雾域名。传输固定为
+    // TCP + TLS（uTLS 指纹 hellochrome_155，见 XrayConfigBuilder）。
+
+    /** Client ID 必须为 32 个 hex 字符。 */
+    fun isValidMistClientId(s: String): Boolean =
+        s.trim().matches(Regex("[0-9a-fA-F]{32}"))
+
+    /** Auth Key 必须能解成 32 字节（接受标准 base64 或 base64url）。 */
+    fun isValidMistKey(s: String): Boolean = normalizeMistKey(s) != null
+
+    /**
+     * 把分享链接里的 key 参数归一化为标准 base64（44 字符），
+     * 或 null（缺失 / 解码失败 / 不是 32 字节）。
+     */
+    private fun normalizeMistKey(raw: String): String? {
+        val t0 = raw.trim()
+        if (t0.isEmpty()) return null
+        var t = t0.replace('-', '+').replace('_', '/')
+        val pad = t.length % 4
+        if (pad > 0) t += "=".repeat(4 - pad)
+        return try {
+            val bytes = Base64.decode(t, Base64.DEFAULT)
+            if (bytes.size != 32) return null
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseMist(link: String): Node {
+        val uri = Uri.parse(link)
+        val clientId = decode(uri.encodedUserInfo.orEmpty()).trim()
+        require(isValidMistClientId(clientId)) { "mist 链接 Client ID 无效（应为 32 个 hex 字符）" }
+        checkHostPort(uri.host, uri.port, "mist")
+        val authKey = normalizeMistKey(uri.getQueryParameter("key").orEmpty())
+        require(authKey != null) { "mist 链接缺少有效的 key（应为 32 字节密钥的 base64/base64url 编码）" }
+        val sni = uri.getQueryParameter("sni")?.takeIf { it.isNotBlank() } ?: uri.host!!
+        return Node(
+            name = nodeName(uri, "${uri.host}:${uri.port}"),
+            rawLink = link,
+            protocol = "mist",
+            host = uri.host!!,
+            port = uri.port,
+            uuid = clientId.lowercase(),
+            password = authKey,
+            network = "tcp",
+            security = "tls",
+            sni = sni,
+            coreType = CoreType.XRAY
         )
     }
 }
