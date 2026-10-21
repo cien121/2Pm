@@ -499,10 +499,15 @@ object XrayConfigBuilder {
         if (upBw.isNotBlank()) settings.put("upmbps", upBw)
         val downBw = normalizeBandwidth(n.bandwidthDown)
         if (downBw.isNotBlank()) settings.put("downmbps", downBw)
+        // Hy2 必须 ALPN h3 (QUIC)，链里没带就强制补上 (对标 v2rayNG)
+        val tls = tlsSettings(n)
+        if (!tls.has("alpn")) {
+            tls.put("alpn", JSONArray().put("h3"))
+        }
         val stream = JSONObject()
             .put("network", "hysteria")
             .put("security", "tls")
-            .put("tlsSettings", tlsSettings(n))
+            .put("tlsSettings", tls)
             .put(
                 "hysteriaSettings", JSONObject()
                     .put("version", 2)
