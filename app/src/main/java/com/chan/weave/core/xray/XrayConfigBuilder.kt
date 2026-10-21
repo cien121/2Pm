@@ -489,12 +489,16 @@ object XrayConfigBuilder {
     }
 
     private fun hysteria2Outbound(n: Node, opts: BuildOptions = BuildOptions()): JSONObject {
-        // Xray's hysteria outbound settings are FLAT (HysteriaClientConfig):
-        // {"version": 2, "address": ..., "port": ...} — NOT servers[].
+        // 标准 Xray Hy2 配置 (对标 v2rayNG，不用 finalmask 非标扩展)
         val settings = JSONObject()
             .put("version", 2)
             .put("address", n.host)
             .put("port", n.port)
+        // 带宽: 标准字段 upmbps/downmbps
+        val upBw = normalizeBandwidth(n.bandwidthUp)
+        if (upBw.isNotBlank()) settings.put("upmbps", upBw)
+        val downBw = normalizeBandwidth(n.bandwidthDown)
+        if (downBw.isNotBlank()) settings.put("downmbps", downBw)
         val stream = JSONObject()
             .put("network", "hysteria")
             .put("security", "tls")
@@ -504,17 +508,8 @@ object XrayConfigBuilder {
                     .put("version", 2)
                     .put("auth", n.uuid)
             )
-        // 标准 Xray Hy2: upmbps/downmbps 放 settings (如 "50 mbps")，不用 brutal
-        val upBw = normalizeBandwidth(n.bandwidthUp)
-        if (upBw.isNotBlank()) settings.put("upmbps", upBw)
-        val downBw = normalizeBandwidth(n.bandwidthDown)
-        if (downBw.isNotBlank()) settings.put("downmbps", downBw)
-        // 端口跳跃 Xray 原生不支持，已移除 (对标 v2rayNG)
-        // 标准 Xray Hy2: 不用 finalmask 非标扩展
-        // 端口跳跃 (mport) Xray 原生不支持，忽略，只连主端口 (对标 v2rayNG)
-        if (n.obfsPassword.isNotBlank()) {
-            // obfs 密码放 streamSettings 的 hysteriaSettings? 暂不支持，先忽略
-        }
+        // 注意: Xray Hy2 原生不支持端口跳跃 (mport)，忽略 (对标 v2rayNG)
+        // obfs 暂不支持
         return JSONObject()
             .put("tag", "proxy")
             .put("protocol", "hysteria")
