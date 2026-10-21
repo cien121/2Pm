@@ -205,13 +205,10 @@ class CianCoreVpnService : VpnService() {
                 } catch (_: Throwable) {
                 }
             }
-        val perAppMode = com.chan.weave.data.PerAppPrefs.getMode(this)
         builder.addRoute("0.0.0.0", 0)
-        // 注意: addDisallowedApplication 和 addAllowedApplication 不能混用
-        // 白名单模式下只用 addAllowedApplication，不加黑名单
-        if (perAppMode != com.chan.weave.data.PerAppPrefs.Mode.ALLOWLIST) {
-            builder.addDisallowedApplication(packageName)
-        }
+        // 始终把自己排除出 VPN：Xray 的出站 socket（TCP/UDP）不进 TUN，
+        // 避免 QUIC socket 回环（Hy2 修复）。注意：app 自身请求（订阅/测速）走直连。
+        builder.addDisallowedApplication(packageName)
         if (ipv6Enabled) {
             try {
                 builder.addRoute("::", 0)
