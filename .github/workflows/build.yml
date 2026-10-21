@@ -47,7 +47,7 @@ jobs:
           # permanent release asset so builds don't depend on the 7-day
           # artifact expiry.
           curl -fSL -o app/libs/libv2ray.aar \
-            https://github.com/cien121/xray-core/releases/download/mist-v0.2-fixed3/libv2ray.aar
+            https://github.com/cien121/xray-core/releases/download/mist-v0.1/libv2ray.aar
           ls -lh app/libs/libv2ray.aar
 
       - name: Restore fixed debug keystore
