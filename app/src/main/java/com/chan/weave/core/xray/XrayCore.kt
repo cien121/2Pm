@@ -80,6 +80,10 @@ class XrayCore(private val appContext: Context) : ProxyCore {
                 ""
             }
             Libv2ray.initCoreEnv(assetDir.absolutePath, xudpKey)
+            // 启动自检：确认 mist transport 已链接进 AAR（防 1.0.21 类 regression）
+            val transports = Libv2ray.listRegisteredTransports()
+            Log.i("WeaveXray", "registered transports: $transports")
+            check(transports.split(",").contains("mist")) { "mist transport not registered, fail-fast" }
             initialized = true
         }
     }
