@@ -19,6 +19,8 @@ import com.chan.weave.core.CoreRegistry
 import com.chan.weave.core.CoreType
 import com.chan.weave.core.xray.XrayConfigBuilder
 import com.chan.weave.core.xray.XrayCore
+import libv2ray.Libv2ray
+import libv2ray.ProtectHandler
 import com.chan.weave.data.ChainPrefs.chainNodeIds
 import com.chan.weave.data.DnsPrefs.directDns
 import com.chan.weave.data.DnsPrefs.fakeDns
@@ -226,6 +228,15 @@ class CianCoreVpnService : VpnService() {
         val core = com.chan.weave.core.CoreRegistry.get(CoreType.XRAY) as? com.chan.weave.core.xray.XrayCore
             ?: throw IllegalStateException("Xray 核心未注册")
         core.setTunFd(tunFd!!.fd)
+        // Issue #1: 给 Xray 注册 socket protect controller，
+        // QUIC/TCP 出站 socket 不进 TUN（替代 addDisallowedApplication 兜底）
+        Libv2ray.setProtectHandler(object : ProtectHandler {
+            override fun protect(fd: Int): Boolean {
+                val ok = this@CianCoreVpnService.protect(fd)
+                Log.d("WeaveProtect", "protect(fd=$fd)->$ok")
+                return ok
+            }
+        })
         core.start(configJson).getOrThrow()
         activeCoreType = CoreType.XRAY
     }
