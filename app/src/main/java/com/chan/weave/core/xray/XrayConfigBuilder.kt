@@ -524,10 +524,9 @@ object XrayConfigBuilder {
 
     /**
      * Mist 自研协议原生出站（proxy/mist，Xray mist 分支）。
-     * 严格按 XRAY_INTEGRATION.md（~/workspace/xray-core/XRAY_INTEGRATION.md）生成：
+     * UDP 传输（UDP-DESIGN.md v1.0）：QUIC 包头伪装、BBR+ pacing、1-RTT 握手。
      * - Node.uuid = clientId（hex 32 字符），Node.password = authKey（标准 base64）
-     * - 传输固定：network tcp / security tls / fingerprint hellochrome_155 /
-     *   alpn h2+http/1.1 / allowInsecure=false（证书链必须校验）
+     * - 传输：udp = true（UDP 模式，不走 TCP/TLS；QUIC Initial 本身已加密）
      * - SNI：Node.sni，默认 = host（雾域名）
      */
     private fun mistOutbound(n: Node): JSONObject {
@@ -542,18 +541,13 @@ object XrayConfigBuilder {
             .put("port", n.port)
             .put("clientId", n.uuid.trim().lowercase())
             .put("authKey", n.password.trim())
+            .put("udp", true)
             .put("heartbeatInterval", 30)
             .put("shapingHeavyPackets", 32)
+        // UDP 模式下不走 Xray 的 TCP/TLS dialer（Mist 客户端直接 DialUDP），
+        // streamSettings 仅作占位，Xray 框架要求其存在。
         val stream = JSONObject()
-            .put("network", "tcp")
-            .put("security", "tls")
-            .put(
-                "tlsSettings", JSONObject()
-                    .put("serverName", sni)
-                    .put("fingerprint", "hellochrome_155")
-                    .put("alpn", JSONArray().put("h2").put("http/1.1"))
-                    .put("allowInsecure", false)
-            )
+            .put("network", "udp")
         return JSONObject()
             .put("tag", "proxy")
             .put("protocol", "mist")
